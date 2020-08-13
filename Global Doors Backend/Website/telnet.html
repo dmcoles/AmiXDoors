@@ -1,0 +1,27 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+ <meta http-equiv="Content-Type" content="text/html;charset=utf-8"> 
+</head>
+<body>
+<div id="fTelnetContainer" class="fTelnetContainer"></div>
+<script>document.write('<script src="//embed-v2.ftelnet.ca/js/ftelnet-loader.norip.xfer.js?v=' + (new Date()).getTime() + '"><\/script>');</script>
+<script>
+    var Options = new fTelnetOptions();
+    Options.BareLFtoCRLF = false;
+    Options.BitsPerSecond = 57600;
+    Options.ConnectionType = 'telnet';
+    Options.Emulation = 'ansi-bbs';
+    Options.Enter = '\r';
+    Options.Font = 'CP437';
+    Options.ForceWss = false;
+    Options.Hostname = 'phantasm.bbs.io';
+    Options.LocalEcho = false;
+    Options.Port = 4490;
+    Options.ScreenColumns = 80;
+    Options.ScreenRows = 29;
+    var fTelnet = new fTelnetClient('fTelnetContainer', Options);
+    fTelnet.Connect();
+</script>
+</body>
+</html>
