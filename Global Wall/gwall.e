@@ -1276,7 +1276,7 @@ PROC postcomment(username, bbsname, comment)
   linedata:=String(1000)
   StringF(linedata,'\s\s\s\s\s\s\s\s\s\b\n','{"userName": "',username,'","source": "',bbsname,'","comment": "',comment,'","bbsshortcode": "',settings.mybbsshortcode,'"}')
 
-  StringF(senddata,'POST /api/WallItems HTTP/1.0\b\nHost:\s\b\nContent-Type: application/json\b\nContent-Length: \d\b\n\b\n',serverHost,EstrLen(linedata))
+  StringF(senddata,'POST /GlobalWall/api/WallItems HTTP/1.0\b\nHost:\s\b\nContent-Type: application/json\b\nContent-Length: \d\b\n\b\n',serverHost,EstrLen(linedata))
 
   StrAdd(senddata,linedata)
 
@@ -1305,7 +1305,7 @@ PROC putcomment(lineid, username, bbsname, comment, bbsshortcode)
   linedata:=String(1000)
   StringF(linedata,'\s\s\s\s\s\s\s\s\s\b\n','{"userName": ',username,',"source": ',bbsname,',"comment": ',comment,',"bbsshortcode": ',bbsshortcode,'}')
 
-  StringF(senddata,'PUT /api/WallItems/\s HTTP/1.0\b\nHost:\s\b\nContent-Type: application/json\b\nContent-Length: \d\b\n\b\n',lineid,serverHost,EstrLen(linedata))
+  StringF(senddata,'PUT /GlobalWall/api/WallItems/\s HTTP/1.0\b\nHost:\s\b\nContent-Type: application/json\b\nContent-Length: \d\b\n\b\n',lineid,serverHost,EstrLen(linedata))
 
   StrAdd(senddata,linedata)
   DisposeLink(linedata)
@@ -1318,7 +1318,7 @@ PROC deletecomment(lineid)
   DEF senddata
   senddata:=String(255)
 
-  StringF(senddata,'DELETE /api/WallItems/\s HTTP/1.0\b\nHost:\s\b\n\b\n',lineid,serverHost)
+  StringF(senddata,'DELETE /GlobalWall/api/WallItems/\s HTTP/1.0\b\nHost:\s\b\n\b\n',lineid,serverHost)
   httpRequest(senddata,NIL)
 
   DisposeLink(senddata)
