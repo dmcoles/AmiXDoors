@@ -20,12 +20,6 @@ namespace GlobalWall.Configuration
 
             config.EnableCors(cors);
 
-            config.Routes.MapHttpRoute(
-                name: "DefaultApi",
-                routeTemplate: "api/wallcontent",
-                defaults: new { id = RouteParameter.Optional }
-            );
-
             config.Formatters.Remove(config.Formatters.XmlFormatter);
             var json = config.Formatters.JsonFormatter;
             json.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();

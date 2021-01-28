@@ -12,9 +12,11 @@ using System.Web.Http.Description;
 
 namespace GlobalLastCallers.Controller
 {
+    [RoutePrefix("api/GlobalLastCallers")]
     public class GlobalLastCallersController : ApiController
     {
-        SqlConnection sqlConn = new SqlConnection(ConfigurationManager.ConnectionStrings["LastCallersDB"].ConnectionString+"; Connection Timeout = 60");
+        public enum StatType { weektopUploads, monthtopUploads, weektopBBSuploads, monthtopBBSuploads, weektopCallers, monthtopCallers, weektopBBSCalls, monthtopBBSCalls, weektopdownloads, monthtopdownloads, weektopBBSdownloads, monthtopBBSdownloads, }
+        SqlConnection sqlConn = new SqlConnection(ConfigurationManager.ConnectionStrings["LastCallersDB"].ConnectionString + "; Connection Timeout = 60");
 
         private CallerDetails ReadItem(SqlDataReader sqlData)
         {
@@ -38,8 +40,110 @@ namespace GlobalLastCallers.Controller
             return Ok(new CallerDetails());
         }
 
+        [Route("Stats")]
+        public IHttpActionResult GetCallerStats([FromUri] StatType statType, [FromUri] int count = 10)
+        {
+            SqlCommand sqlCmd = null;
+            GenericStats genericStat;
+            List<GenericStats> statList = new List<GenericStats>();
+            switch (statType)
+            {
+                case StatType.weektopUploads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,upload)) from lastcallers where dateon >= (getdate() - (datepart(dw, getdate()) - 1)) and upload > 0 group by username order by sum(convert(bigint, upload)) desc", sqlConn);
+                        break;
+                    }
+                case StatType.monthtopUploads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,upload)) from lastcallers where dateon >= (getdate() - datepart(d, getdate() - 1)) and upload > 0 group by username order by sum(convert(bigint, upload)) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.weektopBBSuploads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,upload)) from lastcallers where dateon >= (getdate() - (datepart(dw, getdate()) - 1)) and upload > 0 group by bbsname order by sum(convert(bigint, upload)) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.monthtopBBSuploads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,upload)) from lastcallers where dateon >= (getdate() - datepart(d, getdate() - 1)) and upload > 0 group by bbsname order by sum(convert(bigint, upload)) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.weektopCallers:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username, convert(bigint,count(*)) from lastcallers where dateon >= (getdate() - (datepart(dw, getdate()) - 1)) group by username order by count(*) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.monthtopCallers:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username, convert(bigint,count(*)) from lastcallers where dateon >= (getdate() - datepart(d, getdate() - 1)) group by username order by count(*) desc", sqlConn);
+                        break;
+                    }
+                case StatType.weektopBBSCalls:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname, convert(bigint,count(*)) from lastcallers where dateon >= (getdate() - (datepart(dw, getdate()) - 1)) group by bbsname order by count(*) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.monthtopBBSCalls:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname, convert(bigint,count(*)) from lastcallers where dateon >= (getdate() - datepart(d, getdate() - 1)) group by bbsname order by count(*) desc", sqlConn);
+                        break;
+                    }
+                case StatType.weektopdownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,download)) from lastcallers where dateon >= (getdate() - (datepart(dw, getdate()) - 1)) and download > 0 group by username order by sum(convert(bigint, download)) desc", sqlConn);
+                        break;
+                    }
+                case StatType.monthtopdownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,download)) from lastcallers where dateon >= (getdate() - datepart(d, getdate() - 1)) and download > 0 group by username order by sum(convert(bigint, download)) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.weektopBBSdownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,download)) from lastcallers where dateon >= (getdate() - (datepart(dw, getdate()) - 1)) and download > 0 group by bbsname order by sum(convert(bigint, download)) desc", sqlConn);
+                        break;
+                    }
+
+                case StatType.monthtopBBSdownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,download)) from lastcallers where dateon >= (getdate() - datepart(d, getdate() - 1)) and download > 0 group by bbsname order by sum(convert(bigint, download)) desc", sqlConn);
+                        break;
+                    }
+
+            }
+            if (sqlCmd != null)
+            {
+                if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
+                SqlDataReader sqlData = sqlCmd.ExecuteReader();
+                try
+                {
+                    while (sqlData.Read())
+                    {
+                        genericStat = new GenericStats();
+                        genericStat.name = sqlData.GetString(0);
+                        genericStat.count = sqlData.GetInt64(1);
+                        statList.Add(genericStat);
+                    }
+                }
+                finally
+                {
+                    sqlData.Close();
+                    sqlData.Dispose();
+                    sqlCmd.Dispose();
+                }
+            }
+
+            return Ok(statList);
+        }
 
         [HttpGet]
+        [Route("")]
         // GET: api/GlobalLastCallers
         public IHttpActionResult GetLastCalls([FromUri] int count = 10, [FromUri] int start = 1, string tzname = null)
         {
@@ -54,26 +158,26 @@ namespace GlobalLastCallers.Controller
             {
             }
 
-            if (tzi!=null) tzMins = (int)tzi.GetUtcOffset(DateTime.Now).TotalMinutes;
+            if (tzi != null) tzMins = (int)tzi.GetUtcOffset(DateTime.Now).TotalMinutes;
 
             if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
 
             SqlCommand sqlCmd;
-                
+
             if (tzMins != null)
-                sqlCmd = new SqlCommand("select * from "+
-                "(select Top " + (start+count-1).ToString()+ " ROW_NUMBER() over(order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + "+tzMins.ToString()+ " end, dateon + convert(datetime, timeon)) desc) as rn, "+
-                "id, username, bbsname, "+
-                "convert(varchar, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + "+tzMins.ToString()+ " end, dateon + convert(datetime, timeon)), 105) as dateon, "+
-                "substring(convert(char, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + "+tzMins.ToString()+ " end, convert(time, timeon)), 8), 1, 5) timeon, "+
-                "case when timeoff='--:--' then timeoff else substring(convert(char, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString()+ " end, convert(time, timeoff)), 8), 1, 5) end timeoff, "+
-                "actions, upload, download from LastCallers "+
-                "order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + "+tzMins.ToString()+ " end, dateon + convert(datetime, timeon)) desc,id desc) s where s.rn >= " + start.ToString(), sqlConn);
+                sqlCmd = new SqlCommand("select * from " +
+                "(select Top " + (start + count - 1).ToString() + " ROW_NUMBER() over(order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)) desc) as rn, " +
+                "id, username, bbsname, " +
+                "convert(varchar, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)), 105) as dateon, " +
+                "substring(convert(char, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, convert(time, timeon)), 8), 1, 5) timeon, " +
+                "case when timeoff='--:--' then timeoff else substring(convert(char, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, convert(time, timeoff)), 8), 1, 5) end timeoff, " +
+                "actions, upload, download from LastCallers " +
+                "order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)) desc,id desc) s where s.rn >= " + start.ToString(), sqlConn);
             else
                 sqlCmd = new SqlCommand("select * from (select Top " + (start + count - 1).ToString() + " ROW_NUMBER() over(order by lastCallers.dateon desc,lastCallers.timeon desc) as rn,id,username,bbsname,convert(varchar,dateon,105) as dateon,timeon,timeoff,actions,upload,download from LastCallers order by lastCallers.dateon desc,lastCallers.timeon desc,id desc) s where s.rn>=" + start.ToString(), sqlConn);
 
             CallerStats stats = new CallerStats();
-            
+
             SqlDataReader sqlData = sqlCmd.ExecuteReader();
             try
             {
@@ -172,7 +276,7 @@ namespace GlobalLastCallers.Controller
         [HttpPost]
         // POST: api/GlobalLastCallers
         [ResponseType(typeof(CallerDetails))]
-        public IHttpActionResult Post(CallerDetails newCaller,string tzname = null)
+        public IHttpActionResult Post(CallerDetails newCaller, string tzname = null)
         {
             DateTime dateOn;
             CultureInfo provider = CultureInfo.InvariantCulture;
@@ -260,7 +364,8 @@ namespace GlobalLastCallers.Controller
                 {
                     sqlCmd.Dispose();
                 }
-            } else
+            }
+            else
             {
                 SqlCommand sqlUpdateCmd = new SqlCommand("update LastCallers set actions=@actions, upload=@upload, download=@download, topcps=@topcps, tzoffset=@tzoffset where id = @id", sqlConn);
                 sqlUpdateCmd.Parameters.Add("actions", SqlDbType.VarChar);
@@ -294,6 +399,7 @@ namespace GlobalLastCallers.Controller
             }
             return Ok(newCaller);
         }
+
 
         protected override void Dispose(bool disposing)
         {
