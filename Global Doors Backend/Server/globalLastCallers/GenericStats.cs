@@ -7,7 +7,19 @@ namespace GlobalLastCallers
 {
     public class GenericStats
     {
-        public string name { get; set; }
-        public Int64 count { get; set; }
+        public List<GenericStat> stats { get; set; }
+        public int dayCount { get; set; }
+        public int currentDay { get; set; }
+
+        public GenericStats()
+        {
+            stats = new List<GenericStat>();
+        }
+
+        public void Add(string name, Int64 value)
+        {
+            GenericStat g = new GenericStat() { name = name, count = value };
+            stats.Add(g);
+        }
     }
 }

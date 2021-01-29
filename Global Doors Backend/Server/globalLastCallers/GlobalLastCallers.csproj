@@ -94,6 +94,7 @@
     <Compile Include="Controller\GlobalLastCallersController.cs" />
     <Compile Include="DayStats.cs" />
     <Compile Include="GenericStats.cs" />
+    <Compile Include="GenericStat.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
