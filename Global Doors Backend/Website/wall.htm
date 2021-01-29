@@ -303,7 +303,7 @@
           document.getElementById("statsbody").innerHTML=""
           n=1
           data.forEach(function (statItem) {
-            output = '    ¦ <font color="#00ff00">'+n.toString().padStart(4)+'. </font>! <font color="#ffff00">'+statItem.name.substring(0,43).padEnd(43)+' </font>¦ <font color="#ffffff">'+statItem.count.toString().substring(0,21).padEnd(21)+' </font>¦\n'
+            output = '    ¦ <font color="#00ff00">'+n.toString().padStart(4)+'. </font>! <font color="#ffff00">'+statItem.name.substring(0,43).padEnd(43)+' </font>¦ <font color="#ffffff">'+statItem.count.toLocaleString().substring(0,21).padEnd(21)+' </font>¦\n'
             n++
             document.getElementById("statsbody").innerHTML = document.getElementById("statsbody").innerHTML + output
           })
