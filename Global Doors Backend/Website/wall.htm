@@ -87,7 +87,7 @@
 
     .- -- -------÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">L</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">S</font>÷÷--÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">S</font>÷-------- -- -.
     !       ¡                                             ¦             <font color="#00ff00"><span id="dayText">         </span></font> !
-    !   <font color="#00ff00">Pos</font> ¡ <font color="#ffff00"><span id="statshdr">                                           </span></font> ¦ <font color="#fffff">Amount</font>                !
+    !   <font color="#00ff00">Pos</font> ¡ <font color="#ffff00"><span id="statshdr">                                           </span></font> ¦ <font color="#fffff"><span id="amountTxt">CPS        </span></font>           !
     ¦-------÷-------------- -  -  - --- - -÷- ------------÷------ ---------- -----÷<div id="statsbody">    ¦       !                                             ¦                       ¦</div>    ¦       !                                             ¦                       ¦
     `-----------[<font color="#00ff00">REbEL/QTX</font>]-- -  ----------- ------- ---- ---[<font color="#00ff00">oRdYNe</font>]- -----------'
 
@@ -305,6 +305,35 @@
 
           var sel = document.getElementById('stattype')
           var text= sel.options[sel.selectedIndex].text.substring(0,43).padEnd(43)
+
+          switch (sel.selectedIndex)
+          {
+            case 0:
+            case 1:
+            case 2:
+            case 3:
+              document.getElementById('amountTxt').innerHTML="Upload (KB)"
+              break;
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+              document.getElementById('amountTxt').innerHTML="Dnload (KB)"
+              break;
+            case 8:
+            case 9:
+            case 10:
+            case 11:
+              document.getElementById('amountTxt').innerHTML="Calls      "
+              break;
+            case 12:
+            case 13:
+            case 14:
+            case 15:
+              document.getElementById('amountTxt').innerHTML="CPS        "
+              break;
+          }
+          
           document.getElementById('statshdr').innerHTML=text
 
           document.getElementById("statsbody").innerHTML=""
