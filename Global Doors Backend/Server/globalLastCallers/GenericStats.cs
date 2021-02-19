@@ -10,6 +10,7 @@ namespace GlobalLastCallers
         public List<GenericStat> stats { get; set; }
         public int dayCount { get; set; }
         public int currentDay { get; set; }
+        public string endDate { get; set; }
 
         public GenericStats()
         {

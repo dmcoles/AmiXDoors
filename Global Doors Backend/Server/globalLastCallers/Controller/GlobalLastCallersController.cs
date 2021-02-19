@@ -35,14 +35,20 @@ namespace GlobalLastCallers.Controller
             return detailItem;
         }
 
-        private string getWeekDaysSql()
+        private string getWeekDaysSql(int offset)
         {
-            return "select datepart(dw,getdate()),7";
+            if (offset!=0)
+                return "select 7,7,format(dateadd(wk,-"+offset.ToString()+",(getdate()-datepart(dw,getdate())+7)),'dd-MMM-yyyy')";
+            else
+                return "select datepart(dw,getdate()),7,format(getdate()-datepart(dw,getdate())+7,'dd-MMM-yyyy')";
         }
 
-        private string getMonthDaysSql()
+        private string getMonthDaysSql(int offset)
         {
-            return "select datepart(d,getdate()),datepart(d,eomonth(getdate()))";
+            if (offset != 0)
+                return "select datepart(d, eomonth(dateadd(m, -" + offset.ToString() + ", getdate()))),datepart(d, eomonth(dateadd(m, -" + offset.ToString() + ", getdate()))),format(eomonth(dateadd(m, -" + offset.ToString() + ", getdate())),'dd-MMM-yyyy')";
+            else
+                return "select datepart(d,getdate()),datepart(d,eomonth(getdate())),format(eomonth(getdate()),'dd-MMM-yyyy')";
         }
 
         public IHttpActionResult GetCallerDetails(int id)
@@ -51,7 +57,7 @@ namespace GlobalLastCallers.Controller
         }
 
         [Route("Stats")]
-        public IHttpActionResult GetCallerStats([FromUri] StatType statType, [FromUri] int count = 10)
+        public IHttpActionResult GetCallerStats([FromUri] StatType statType, [FromUri] int count = 10, [FromUri] int offset = 0)
         {
             SqlCommand sqlCmd = null;
             SqlCommand sqlCmd2 = null;
@@ -61,108 +67,108 @@ namespace GlobalLastCallers.Controller
             {
                 case StatType.weektopUploads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint, upload)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) + 7) - 1 and upload > 0 group by username order by sum(convert(bigint, upload)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint, upload)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and upload > 0 group by username order by sum(convert(bigint, upload)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
                 case StatType.monthtopUploads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint, upload)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and upload > 0 group by username order by sum(convert(bigint, upload)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint, upload)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and upload > 0 group by username order by sum(convert(bigint, upload)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.weektopBBSuploads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,upload)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 and upload > 0 group by bbsname order by sum(convert(bigint, upload)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,upload)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and upload > 0 group by bbsname order by sum(convert(bigint, upload)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.monthtopBBSuploads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,upload)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and upload > 0 group by bbsname order by sum(convert(bigint, upload)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,upload)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and upload > 0 group by bbsname order by sum(convert(bigint, upload)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.weektopCallers:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username, convert(bigint,count(*)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 group by username order by count(*) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username, convert(bigint,count(*)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 group by username order by count(*) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.monthtopCallers:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username, convert(bigint,count(*)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 group by username order by count(*) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username, convert(bigint,count(*)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 group by username order by count(*) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
                 case StatType.weektopBBSCalls:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname, convert(bigint,count(*)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 group by bbsname order by count(*) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname, convert(bigint,count(*)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 group by bbsname order by count(*) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.monthtopBBSCalls:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname, convert(bigint,count(*)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 group by bbsname order by count(*) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname, convert(bigint,count(*)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 group by bbsname order by count(*) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
                 case StatType.weektopdownloads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,download)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 and download > 0 group by username order by sum(convert(bigint, download)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,download)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and download > 0 group by username order by sum(convert(bigint, download)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
                 case StatType.monthtopdownloads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,download)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and download > 0 group by username order by sum(convert(bigint, download)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint,download)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and download > 0 group by username order by sum(convert(bigint, download)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.weektopBBSdownloads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,download)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 and download > 0 group by bbsname order by sum(convert(bigint, download)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,download)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and download > 0 group by bbsname order by sum(convert(bigint, download)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.monthtopBBSdownloads:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,download)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and download > 0 group by bbsname order by sum(convert(bigint, download)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,sum(convert(bigint,download)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and download > 0 group by bbsname order by sum(convert(bigint, download)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.weektopUserCps:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,max(convert(bigint,topcps)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 and topcps > 0 group by username order by max(convert(bigint, topcps)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,max(convert(bigint,topcps)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and topcps > 0 group by username order by max(convert(bigint, topcps)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.monthtopUserCps:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,max(convert(bigint,topcps)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and topcps > 0 group by username order by max(convert(bigint, topcps)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,max(convert(bigint,topcps)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and topcps > 0 group by username order by max(convert(bigint, topcps)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
                 case StatType.weektopBBSCps:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,max(convert(bigint,topcps)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1)) and ((cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))+7)-1 and topcps > 0 group by bbsname order by max(convert(bigint, topcps)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getWeekDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,max(convert(bigint,topcps)) from lastcallers where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and topcps > 0 group by bbsname order by max(convert(bigint, topcps)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
                         break;
                     }
 
                 case StatType.monthtopBBSCps:
                     {
-                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,max(convert(bigint,topcps)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)) and dateadd(m,1, (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and topcps > 0 group by bbsname order by max(convert(bigint, topcps)) desc", sqlConn);
-                        sqlCmd2 = new SqlCommand(getMonthDaysSql(), sqlConn);
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " bbsname,max(convert(bigint,topcps)) from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and topcps > 0 group by bbsname order by max(convert(bigint, topcps)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
             }
@@ -195,6 +201,7 @@ namespace GlobalLastCallers.Controller
                     {
                         stats.currentDay = sqlData.GetInt32(0);
                         stats.dayCount = sqlData.GetInt32(1);
+                        stats.endDate = sqlData.GetString(2);
                     }
                 }
                 finally
