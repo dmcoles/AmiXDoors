@@ -487,7 +487,7 @@ PROC main()
     WriteF('Unable to locate the last caller entry in the callers log\n')
   ENDIF
   
-  END fds
+  END fds[32]
   
 ENDPROC
 

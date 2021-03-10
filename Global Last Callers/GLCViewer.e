@@ -43,7 +43,7 @@ PROC fullTrim(src:PTR TO CHAR)
     IF n>0 THEN v:=tempStr[n-1]
   ENDWHILE
   StrCopy(src,tempStr)
-  Dispose(tempStr)
+  DisposeLink(tempStr)
 ENDPROC
 
 
@@ -786,7 +786,7 @@ PROC main() HANDLE
 EXCEPT DO
   IF jsonBuffer<>NIL THEN Dispose(jsonBuffer)
   IF fh2<>0 THEN Close(fh2)
-  IF fds<>NIL THEN END fds
+  IF fds<>NIL THEN END fds[32]
 
   DeleteFile(tempFile)
   SELECT exception
