@@ -1,19 +1,12 @@
-MODULE 'dos/dos','dos/dosasl','dos/datetime','socket','net/netdb','net/in','net/socket','AEDoor'
+/* MRC Door */
+
+  OPT LARGE
+
+MODULE 'dos/dos','dos/dosasl','dos/datetime','socket','net/netdb','net/in','net/socket','exec/ports','devices/timer','dos/dosextens','exec/io','amigalib/ports','amigalib/io','exec/nodes'
 
 /*
- check protocol for spaces to underscores conversion
- nick autocompletion
- nick mention highlight
- scrolling banners
-
- cursor left/right
- buffer history
  dl chatlog
- put strings into settings
- persist settings for user
- /set update settings
- changes page
- latency
+ scrollback
 */
 
 CONST ERR_EXCEPT=1
@@ -23,33 +16,364 @@ CONST ECONNRESET=54
 CONST FIONBIO=$8004667e
 
 CONST CHAR_BACKSPACE=8
+CONST LEFTARROW=2
+CONST RIGHTARROW=3
 CONST UPARROW=4
 CONST DOWNARROW=5
 
 CONST MAX_BUFFER=140    -> Max input buffer limit [sf]
 
+CONST LF=1
+CONST JH_REGISTER=1
+CONST JH_SHUTDOWN=2
+CONST JH_WRITE=3
+CONST JH_HK=6
+CONST JH_BBSNAME=11
+CONST JH_ExtHK=15
+CONST JH_SIGBIT=16
+CONST DT_NAME=100
+CONST DT_SLOTNUMBER=104
+CONST DT_LINELENGTH=122
+CONST DT_TIMEOUT=125
+CONST ZMODEMSEND=137
+CONST GETKEY=500
+CONST BB_GETTASK=512
+
+OBJECT ansi
+  ansicode: INT
+  buf[80]: ARRAY OF CHAR
+ENDOBJECT
+
+OBJECT jhMessage
+  msg: mn
+  string[200]: ARRAY OF CHAR
+  data: LONG   -> SAID INT
+  command: LONG -> SAID INT
+  nodeID: LONG -> SAID INT
+  lineNum: LONG -> SAID INT
+  signal: LONG
+  task: PTR TO process
+  semi: LONG
+  filler1: LONG
+  filler2: LONG
+  strptr: PTR TO CHAR
+  filler3:LONG
+ENDOBJECT
+
+OBJECT userRec
+  recIdx:LONG
+  permIdx:LONG
+  enterChatMe[80]:ARRAY OF CHAR
+  enterChatRoom[80]:ARRAY OF CHAR
+  enterRoomMe[80]:ARRAY OF CHAR
+  enterRoomRoom[80]:ARRAY OF CHAR
+  leaveChatMe[80]:ARRAY OF CHAR
+  leaveChatRoom[80]:ARRAY OF CHAR
+  leaveRoomMe[80]:ARRAY OF CHAR
+  leaveRoomRoom[80]:ARRAY OF CHAR
+  name[80]:ARRAY OF CHAR
+  defaultRoom[80]:ARRAY OF CHAR
+  temp1[80]:ARRAY OF CHAR
+  temp5[80]:ARRAY OF CHAR
+  temp6[80]:ARRAY OF CHAR
+  temp7[80]:ARRAY OF CHAR
+  nameColor[16]:ARRAY OF CHAR
+  ltBracket[16]:ARRAY OF CHAR
+  rtBracket[16]:ARRAY OF CHAR
+  useClock:LONG
+  clockFormat:LONG
+ENDOBJECT
+
+DEF doorPort:PTR TO mp
+DEF replyPort:PTR TO mp
+DEF comm=FALSE
+
+DEF plyr=NIL:PTR TO userRec
+
+DEF userFile[255]:STRING
 DEF userTag[255]:STRING
 DEF siteTag[255]:STRING
+DEF userAlias[255]:STRING
+DEF userIndex=0
 DEF myRoom[255]:STRING
+DEF myTopic[255]:STRING
 DEF userName[100]:STRING
 DEF myNamePrompt[255]:STRING
 DEF mrcVersion[255]:STRING
+DEF mrcStats[255]:STRING
 DEF lastPrivMsg[255]:STRING
 DEF mrcserver=-1
 DEF iMaxBuffer=75
-DEF diface,strfield:LONG
 DEF chatLines:PTR TO LONG
 DEF inputStr[255]:STRING
 DEF roomUsers=NIL:PTR TO CHAR
-
-DEF currRoom[255]:STRING
-DEF currTopic[255]:STRING
+DEF bufferHist=NIL:PTR TO LONG
+DEF bannerList=NIL:PTR TO LONG
 DEF currCount=0
 DEF exitChat=FALSE
+DEF chatLog[255]:STRING
 
-DEF inputColour=13
+DEF keycount=0
 
-PROC strCmpi(s1:PTR TO CHAR,s2:PTR TO CHAR,len=ALL)
+DEF inputColour=15
+DEF numLines=29
+DEF cursorPos=0
+DEF bufferItem=-1
+DEF charsEntered=FALSE
+DEF latencyVal=0
+DEF loop=0
+
+DEF banIdx=-1
+DEF bannerOff=0
+DEF scrollWait=0
+DEF scrollDly=0
+
+DEF scrollSpeed=15
+
+DEF node=0
+
+DEF userIdx=1    -> Index of UserList search [sf]
+DEF lastUSearch[255]:STRING -> Last user search string [sf]
+
+DEF ansi:ansi
+
+DEF timerport=NIL: PTR TO mp
+DEF timermsg=NIL: PTR TO timerequest
+DEF timerQueued=FALSE
+
+
+PROC setTimer(timevalSecs,timevalMicro)
+  timermsg.io.command:=TR_ADDREQUEST /* add a new timer request */
+  timermsg.time.secs:=timevalSecs          /* seconds */
+  timermsg.time.micro:=timevalMicro        /* microseconds */
+  timermsg.io.mn.replyport:=timerport
+  timerQueued:=TRUE
+  SendIO(timermsg)     /* post the request to the timer device */
+ENDPROC
+
+PROC waitTime()
+  DEF res
+  IF timerQueued
+    timerQueued:=FALSE
+    res:=WaitIO(timermsg)
+  ELSE
+    res:=0
+  ENDIF
+ENDPROC res
+
+PROC stopTime()
+  IF timerQueued
+    IF(CheckIO(timermsg))=FALSE THEN AbortIO(timermsg)
+    WaitIO(timermsg)
+    timerQueued:=FALSE
+  ENDIF
+ENDPROC
+
+PROC openTimer()
+  DEF error
+
+  IF(timerport:=createPort(0,0))=NIL THEN RETURN TRUE
+
+  IF(timermsg:=(createExtIO(timerport,SIZEOF timerequest)))=FALSE THEN RETURN TRUE
+
+  timermsg.io.mn.replyport:=timerport
+  IF(error:=OpenDevice('timer.device',UNIT_VBLANK,timermsg,0)) THEN RETURN error
+ENDPROC FALSE
+
+PROC closeTimer()
+  IF(timermsg)
+    stopTime()
+    CloseDevice(timermsg)
+    deleteExtIO(timermsg)
+    timermsg:=NIL
+    IF(timerport) THEN deletePort(timerport)
+    timerport:=NIL
+  ENDIF
+ENDPROC
+
+PROC sendMsg(doorMsg:PTR TO jhMessage,task=0,sigbit=0)
+  DEF signals
+  doorMsg.msg.ln.type:=NT_MESSAGE
+  doorMsg.msg.length:=SIZEOF jhMessage
+  doorMsg.msg.replyport:=replyPort
+
+  ->WHILE GetMsg(replyPort)
+  ->ENDWHILE
+  PutMsg(doorPort,doorMsg)
+  ->IF (GetMsg(replyPort)) THEN RETURN
+  IF task=0
+    WaitPort(replyPort)
+  ELSE
+    signals:=Shl(1,timerport.sigbit) OR Shl(1,replyPort.sigbit)
+    signals:=Wait(signals)
+    IF ((signals AND Shl(1,replyPort.sigbit))=0)
+      Signal(task,Shl(1,sigbit))
+      WaitPort(replyPort)
+    ENDIF
+  ENDIF
+  GetMsg(replyPort)
+ENDPROC 
+
+PROC sendCommand(cmdCode)
+  DEF doorMsg:PTR TO jhMessage
+
+  IF doorPort=0 THEN RETURN FALSE
+  doorMsg:=NEW doorMsg
+
+  doorMsg.command:=cmdCode
+  sendMsg(doorMsg)
+  END doorMsg
+ENDPROC TRUE
+
+PROC sendDataCommand(cmdCode,data)
+  DEF doorMsg:PTR TO jhMessage
+
+  IF doorPort=0 THEN RETURN FALSE
+
+  doorMsg:=NEW doorMsg
+  doorMsg.command:=cmdCode
+  doorMsg.data:=data
+  sendMsg(doorMsg)
+  END doorMsg
+ENDPROC TRUE
+
+PROC writeStr(strIn:PTR TO CHAR,lfFlag)
+  DEF doorMsg:PTR TO jhMessage
+
+  IF doorPort=0 THEN RETURN FALSE
+  doorMsg:=NEW doorMsg
+  doorMsg.command:=JH_WRITE
+  WHILE StrLen(strIn)>199
+    AstrCopy(doorMsg.string,strIn,200)
+    sendMsg(doorMsg)
+    strIn:=strIn+200
+  ENDWHILE
+  AstrCopy(doorMsg.string,strIn,200)
+  sendMsg(doorMsg)
+  
+  IF lfFlag
+    AstrCopy(doorMsg.string,'\b\n')
+    sendMsg(doorMsg)
+  ENDIF
+  END doorMsg
+ENDPROC TRUE
+
+PROC sendStrCommand(cmdCode,data,strIn:PTR TO CHAR)
+  DEF doorMsg:PTR TO jhMessage
+
+  IF doorPort=0 THEN RETURN FALSE
+  doorMsg:=NEW doorMsg
+  doorMsg.command:=cmdCode
+  doorMsg.data:=data
+  AstrCopy(doorMsg.string,strIn,200)
+  sendMsg(doorMsg)
+  END doorMsg
+ENDPROC TRUE
+
+PROC doExtHK()
+  DEF doorMsg:PTR TO jhMessage
+  DEF res,sigbit,task
+
+  IF doorPort=0 THEN RETURN FALSE
+  doorMsg:=NEW doorMsg
+  doorMsg.command:=JH_SIGBIT
+  doorMsg.data:=0
+  sendMsg(doorMsg)
+  sigbit:=doorMsg.data
+
+  doorMsg.command:=BB_GETTASK
+  doorMsg.data:=0
+  sendMsg(doorMsg)
+  task:=doorMsg.task
+
+  doorMsg.command:=JH_ExtHK
+  doorMsg.signal:=sigbit
+  doorMsg.data:=0
+  sendMsg(doorMsg,task,sigbit)
+  res:=doorMsg.command
+  IF res=-3 THEN res:=0
+  END doorMsg
+ENDPROC res
+
+PROC sendCommandString(cmdCode,data,outStr:PTR TO CHAR)
+  DEF doorMsg:PTR TO jhMessage
+
+  IF doorPort=0 THEN RETURN FALSE
+  doorMsg:=NEW doorMsg
+  doorMsg.command:=cmdCode
+  doorMsg.data:=data
+  sendMsg(doorMsg)
+  StrCopy(outStr,doorMsg.string,200)
+  END doorMsg
+ENDPROC TRUE
+
+PROC createComm(node)
+  DEF doorPortName[20]:STRING
+  StringF(doorPortName,'\s\d','AEDoorPort',node)
+  IF (doorPort:=FindPort(doorPortName))=FALSE THEN RETURN FALSE
+  IF (replyPort:=createPort(0,0))=FALSE THEN RETURN FALSE
+  sendCommand(JH_REGISTER)  
+ENDPROC TRUE
+
+PROC deleteComm()
+  IF (doorPort<>0) AND (replyPort<>0)
+    sendCommand(JH_SHUTDOWN)  
+  ENDIF
+  IF replyPort<>0
+    deletePort(replyPort)
+    replyPort:=0
+  ENDIF
+ENDPROC
+
+PROC fetchKey()
+  DEF res
+  DEF tempstr[255]:STRING
+
+  keycount++
+  IF Mod(keycount,500)<>0
+    sendCommandString(GETKEY,0,tempstr)
+    IF StrCmp(tempstr,'1')
+      sendCommandString(JH_HK,0,tempstr)
+      IF StrLen(tempstr)>0 THEN res:=tempstr[0] ELSE res:=0
+      sendDataCommand(705,1) ->console cursor on
+      RETURN res
+    ENDIF
+    RETURN 0
+  ENDIF
+  keycount:=1
+
+  sendStrCommand(DT_TIMEOUT,0,'0')
+
+  openTimer()
+  setTimer(0,1000)
+  
+  res:=doExtHK()
+  
+  IF (res<>0)
+    stopTime()
+  ELSE
+    waitTime()
+  ENDIF
+  closeTimer()
+  sendDataCommand(705,1) ->console cursor on
+ENDPROC res
+
+PROC listAddItem(list:PTR TO LONG, item)
+  DEF n
+  n:=ListLen(list)
+  ListAdd(list,[0])
+  list[n]:=item
+ENDPROC
+
+PROC listAddNewString(list:PTR TO LONG, v, l=ALL)
+  DEF n
+  n:=ListLen(list)
+  ListAdd(list,[0])
+  list[n]:=String(StrLen(v))
+  StrCopy(list[n],v,l)
+ENDPROC
+
+/*PROC strCmpi(s1:PTR TO CHAR,s2:PTR TO CHAR,len=ALL)
   DEF ts1,ts2,r
   ts1:=String(StrLen(s1))
   ts2:=String(StrLen(s2))
@@ -58,9 +382,34 @@ PROC strCmpi(s1:PTR TO CHAR,s2:PTR TO CHAR,len=ALL)
   LowerStr(ts1)
   LowerStr(ts2)
   r:=StrCmp(ts1,ts2,len)
-  Dispose(ts1)
-  Dispose(ts2)
-ENDPROC r
+  DisposeLink(ts1)
+  DisposeLink(ts2)
+ENDPROC r*/
+
+PROC charToLower(c)
+  /* convert a given char to lowercase */
+  DEF str[1]:STRING
+  str[0]:=c
+  LowerStr(str)
+ENDPROC str[0]
+
+PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len=ALL)
+  /* case insensitive string compare */
+  DEF i,l1,l2
+
+  IF len=ALL
+    l1:=StrLen(test1)
+    l2:=StrLen(test2)
+    IF l1<>l2 THEN RETURN FALSE
+    len:=l1
+  ENDIF
+
+  FOR i:=0 TO len-1
+    IF charToLower(test1[i])<>charToLower(test2[i]) THEN RETURN FALSE
+  ENDFOR
+ENDPROC TRUE
+
+
 
 PROC replaceStr(source:PTR TO CHAR, search:PTR TO CHAR, replace:PTR TO CHAR)
   DEF workStr[255]:STRING
@@ -73,13 +422,34 @@ PROC replaceStr(source:PTR TO CHAR, search:PTR TO CHAR, replace:PTR TO CHAR)
   ENDWHILE
 ENDPROC
 
+PROC getDateTime(outDateStr:PTR TO CHAR)
+  DEF datestr[10]:STRING
+  DEF timestr[10]:STRING
+  DEF d : PTR TO datestamp
+  DEF dt : datetime
+
+  d:=dt.stamp
+  DateStamp(d)
+
+  dt.format:=FORMAT_DOS
+  dt.flags:=0
+  dt.strday:=0
+  dt.strdate:=datestr
+  dt.strtime:=timestr
+
+  IF DateToStr(dt)
+    StringF(outDateStr,'\s[7]\d\s \s',datestr,IF dt.stamp.days>=8035 THEN 20 ELSE 19,datestr+7,timestr)
+  ENDIF 
+ENDPROC
+
 PROC getTime(outTimeStr:PTR TO CHAR)
   DEF d : PTR TO datestamp
   DEF dt : datetime
   DEF datestr[10]:STRING
   DEF daystr[10]:STRING
   DEF timestr[10]:STRING
-  DEF r,dateVal
+  DEF hours[2]:STRING
+  DEF hr,r,dateVal
 
   d:=dt.stamp
   DateStamp(d)
@@ -89,12 +459,189 @@ PROC getTime(outTimeStr:PTR TO CHAR)
   dt.strday:=0
   dt.strdate:=0
   dt.strtime:=timestr
-
+  
   IF DateToStr(dt)
-    StringF(outTimeStr,'\s[5]',timestr)
+    IF plyr.clockFormat
+      StrCopy(hours,timestr,2)
+      hr:=Val(hours)
+      IF hr>=12 
+        timestr[5]:="P"
+      ELSE    
+        timestr[5]:="A"
+      ENDIF
+      IF hr>12 THEN hr:=hr-12
+      StringF(outTimeStr,'\r\z\d[2]\s[4]',hr,timestr+2)
+    ELSE
+      StringF(outTimeStr,'\s[5]',timestr)
+    ENDIF
     RETURN TRUE
   ENDIF
 ENDPROC FALSE
+
+PROC findPlyr()
+  DEF x,ret = 0
+  DEF done=FALSE
+  DEF un[255]:STRING
+  DEF tmp[255]:STRING
+  
+  x:=1
+  StrCopy(un,userAlias)
+  replaceStr(un,' ','_')
+  stripMCI(un)
+  UpperStr(un)
+  WHILE readPlyr(x) AND (done=FALSE)
+    StrCopy(tmp,plyr.name)
+    stripMCI(tmp)
+    UpperStr(tmp)
+    IF StrCmp(tmp,un) 
+      done:=TRUE
+      ret:=x
+    ENDIF
+  ENDWHILE
+ENDPROC ret
+
+PROC readPlyr(i)
+  DEF ret = FALSE
+  DEF fh
+  
+  fh:=Open(userFile,MODE_OLDFILE)
+  IF fh<>0
+    Seek(fh,(i-1)*SIZEOF userRec,OFFSET_BEGINNING)
+    IF Read(fh,plyr,SIZEOF userRec) = SIZEOF userRec THEN ret:=TRUE
+    Close(fh)
+  ENDIF
+ENDPROC ret
+
+PROC savePlyr(i)
+  DEF fh
+  IF FileLength(userFile)=-1
+    i:=1
+    plyr.recIdx:=1
+  ENDIF
+
+  fh:=Open(userFile,MODE_READWRITE)
+  IF fh<>0
+    Seek(fh,(i-1)*SIZEOF userRec,OFFSET_BEGINNING)
+    Write(fh,plyr,SIZEOF userRec)
+    Close(fh)
+  ENDIF
+ENDPROC
+
+PROC newPlyr()
+  DEF i=0
+  DEF tempstr[255]:STRING
+  WHILE readPlyr(i+1) DO i++
+  
+  END plyr
+  plyr:=NEW plyr
+  plyr.recIdx:=i+1
+  plyr.permIdx:=userIndex
+  AstrCopy(plyr.enterChatMe,'|07- |15You have entered chat',80)
+  AstrCopy(plyr.enterChatRoom,'|07- |11%1 |03has arrived!',80)
+  AstrCopy(plyr.leaveChatMe,'|07- |12You have left chat.',80)
+  AstrCopy(plyr.leaveChatRoom,'|07- |12%1 |04has left chat.',80)
+  AstrCopy(plyr.enterRoomMe,'|07- |11You are now in |02%3',80)
+  AstrCopy(plyr.leaveRoomRoom,'|07- |02%1 |10has left the room.',80)
+  AstrCopy(plyr.leaveRoomMe,'|07- |10You have left room |02%4',80)
+  AstrCopy(plyr.enterRoomRoom,'|07- |11%1 |03has entered the room.',80)
+  AstrCopy(plyr.defaultRoom,'lobby',80)
+  AstrCopy(plyr.nameColor,'|11',16)
+  AstrCopy(plyr.ltBracket,'|03<',16)
+  AstrCopy(plyr.rtBracket,'|03>',16)
+  plyr.useClock:=TRUE
+  plyr.clockFormat:=FALSE
+ 
+  StrCopy(tempstr,userAlias)
+  replaceStr(tempstr,' ','_')
+  stripMCI(tempstr)
+  AstrCopy(plyr.name,tempstr,80)
+
+  savePlyr(plyr.recIdx) 
+ENDPROC
+
+PROC stripAnsi(s: PTR TO CHAR, d: PTR TO CHAR, resetit, strip)
+  DEF i,j,k,p,c
+  IF resetit
+    ansi.ansicode:=0
+    RETURN
+  ENDIF
+
+  i:=StrLen(s)
+  j:=0
+  k:=0
+  WHILE(j<i)
+    c:=s[j]
+    IF((c=13) AND (strip<>0))
+      j++
+      ansi.ansicode:=0
+    ELSEIF((ansi.ansicode=0) AND (c<>""))
+      d[k]:=c
+      j++
+      k++
+    ELSE
+      IF(ansi.ansicode)
+        ansi.buf[ansi.ansicode]:=c
+        IF((ansi.ansicode=1) AND (c<>"["))
+          ansi.ansicode:=ansi.ansicode+1
+
+          p:=0
+          ansi.buf[ansi.ansicode]:=0
+          WHILE(ansi.buf[p]<>0)
+            d[k]:=ansi.buf[p]
+            k++
+            p++
+          ENDWHILE
+          ansi.ansicode:=0
+        ELSE
+          SELECT c
+            CASE "m"
+              ansi.ansicode:=0
+            DEFAULT
+              ansi.ansicode:=ansi.ansicode+1
+              IF(((c>="A") AND (c<="Z")) OR ((c>="a") AND (c<="z")) OR (ansi.ansicode>30))
+                p:=0
+                ansi.buf[ansi.ansicode]:=0
+                WHILE(ansi.buf[p]<>0)
+                  d[k]:=ansi.buf[p]
+                  k++
+                  p++
+                ENDWHILE
+                ansi.ansicode:=0
+              ENDIF
+          ENDSELECT
+        ENDIF
+      ELSEIF(c="")
+        ansi.buf[0]:=""
+        ansi.ansicode:=1
+      ENDIF
+      j++
+    ENDIF
+  ENDWHILE
+  d[k]:=0
+
+  ->ensure estring length is updated
+  SetStr(d,StrLen(d))
+ENDPROC
+
+PROC stripMCI(t:PTR TO CHAR)
+  DEF s[255]:STRING
+  DEF skip=0
+  DEF i
+  
+  FOR i:=0 TO StrLen(t)-1
+    IF skip=0
+      IF t[i]<>"|"
+        StrAdd(s,t+i,1)
+      ELSE
+        skip:=2
+      ENDIF
+    ELSE
+      skip--
+    ENDIF
+  ENDFOR
+  
+  StrCopy(t,s)
+ENDPROC
 
 PROC updateMaxBuffersize()
   iMaxBuffer:=255-(StrLen(userTag)+StrLen(siteTag)+(StrLen(myRoom)*2)+StrLen(myNamePrompt)+20)
@@ -108,50 +655,80 @@ ENDPROC
 PROC showTitle()
   DEF tempstr[255]:STRING
   StringF(tempstr,'\c',12)
-  WriteStr(diface,tempstr,0)
-  WriteStr(diface,'[0m.------------------------------- [34mMu[36mlti [0mRela[36my Ch[34mat [0m-----------------------------.',0)
+  writeStr(tempstr,0)
+  writeStr('[0m.------------------------------- [34mMu[36mlti [0mRela[36my Ch[34mat [0m-----------------------------.',0)
   updateHeader()
-  WriteStr(diface,'[3;1H[0m|[70C/? H[36me[36mlp [0m|\b\n',0)
-  WriteStr(diface,'[5;1H[0m`------------------------------------------------------------------------------''',0)
+  writeStr('[3;1H[0m|[70C/? H[36me[36mlp [0m|\b\n',0)
+  writeStr('[4;1H[0m`------------------------------------------------------------------------------''',0)
   updateFooter()
+ENDPROC
+
+PROC restoreCursor()
+  DEF tempstr[255]:STRING
+  StrCopy(tempstr,myNamePrompt)
+  stripMCI(tempstr)
+
+  StringF(tempstr,'[\d;\dH',ListLen(chatLines)+6,Min(79,cursorPos+1+StrLen(tempstr)))
+  writeStr(tempstr,0)
 ENDPROC
 
 PROC updateHeartbeat(anim)
   DEF tempstr[255]:STRING
   IF anim
-    StringF(tempstr,'[0m[\d;77H+[\d;\dH',ListLen(chatLines)+6,ListLen(chatLines)+7,Min(79,StrLen(inputStr)+1))
+    StringF(tempstr,'[0m[\d;77H+',ListLen(chatLines)+5)
   ELSE
-    StringF(tempstr,'[0m[\d;77H [\d;\dH',ListLen(chatLines)+6,ListLen(chatLines)+7,Min(79,StrLen(inputStr)+1))
+    StringF(tempstr,'[0m[\d;77H ',ListLen(chatLines)+5)
   ENDIF
-  WriteStr(diface,tempstr,0)
+  writeStr(tempstr,0)
 ENDPROC
 
 PROC updateHeader()
   DEF tempstr[255]:STRING
-  StringF(tempstr,'[2;1H[0m| R[36moom  [33m>[0m>> [K[67C|[68D\s',currRoom)
-  WriteStr(diface,tempstr,0)
-  StringF(tempstr,'[4;1H[0m| T[36mopic [33m>[0m>> [K[67C|[68D\s',currTopic)
-  WriteStr(diface,tempstr,0)
+  StringF(tempstr,'[2;1H[0m| R[36moom  [33m>[0m>> [K[67C|[68D#\s',myRoom)
+  writeStr(tempstr,0)
+  StringF(tempstr,'[3;1H[0m| T[36mopic [33m>[0m>> [K[59C/? H[36me[36mlp [0m|[68D\s',myTopic)
+  writeStr(tempstr,0)
+  
 ENDPROC
 
 PROC updateFooter()
   DEF tempstr[255]:STRING
   updateMaxBuffersize()
-  StringF(tempstr,'[\d;1H[0m--[Latency-000ms]-[Chatters-\r\z\d[2]]---------------------[Buffer-\r\z\d[3]/\r\z\d[3]]-[[36mM[34mR[36mC[0m]-[ ]--',ListLen(chatLines)+6,currCount,StrLen(inputStr),iMaxBuffer)
-  WriteStr(diface,tempstr,0)
+  StringF(tempstr,'[\d;1H[0m--[Latency-\r\z\d[3]ms]-[Chatters-\r\z\d[2]]---------------------[Buffer-\r\z\d[3]/\r\z\d[3]]-[[36mM[34mR[36mC[0m]-[ ]--',ListLen(chatLines)+5,latencyVal,currCount,StrLen(inputStr),iMaxBuffer)
+  writeStr(tempstr,0)
+ENDPROC
+
+
+PROC addToBufferHistory(b:PTR TO CHAR)
+  DEF i
+
+  FOR i:=(ListLen(bufferHist)-1) TO 1 STEP -1
+    StrCopy(bufferHist[i],bufferHist[i-1])
+  ENDFOR
+  StrCopy(bufferHist[0],b)
+  bufferItem:=-1
 ENDPROC
 
 PROC displayCurrentInput()
   DEF tempstr[255]:STRING
   DEF tempInput[80]:STRING
-  IF StrLen(inputStr)>78
-  	RightStr(tempInput,inputStr,78)
+  DEF xpos,ypos,plen
+  
+  StrCopy(tempstr,myNamePrompt)
+  stripMCI(tempstr)
+  plen:=StrLen(tempstr)
+  
+  IF cursorPos>(78-plen)
+  	StrCopy(tempInput,inputStr+cursorPos-(78-plen),78-plen)
+    xpos:=79
   ELSE
-    StrCopy(tempInput,inputStr)
+    StrCopy(tempInput,inputStr,78-plen)
+    xpos:=cursorPos
   ENDIF
-  StringF(tempstr,'[\d;1H[K[0m|\r\z\d[2]\s',ListLen(chatLines)+7,inputColour,tempInput)
+  ypos:=ListLen(chatLines)+6
+  StringF(tempstr,'[\d;1H[K[0m\s|\r\z\d[2]\s[\d;\dH',ypos,myNamePrompt,inputColour,tempInput,ListLen(chatLines)+6,Min(79,cursorPos+1+plen))
   pipeToAnsi(tempstr)
-  WriteStr(diface,tempstr,0)
+  writeStr(tempstr,0)
 ENDPROC
 
 PROC showChat()
@@ -159,8 +736,8 @@ PROC showChat()
   DEF tempstr[255]:STRING
   
   FOR i:=0 TO ListLen(chatLines)-1
-    StringF(tempstr,'[\d;1H[0m[K\s',i+6,chatLines[i])
-    WriteStr(diface,tempstr,0)
+    StringF(tempstr,'[\d;1H[0m[K\s',i+5,chatLines[i])
+    writeStr(tempstr,0)
   ENDFOR
  
   displayCurrentInput()
@@ -169,14 +746,32 @@ ENDPROC
 PROC add2Chat(s:PTR TO CHAR)
   DEF timeStr[10]:STRING
   DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
   DEF tempCharStr[1]:STRING
   DEF lastColourCode[3]:STRING
-  DEF i,c
+  DEF hl[20]:STRING
+  DEF i,c,p
 
-  getTime(timeStr)  
+  StrCopy(hl,'|16|00.|16|07')
+  
+  StrCopy(tempstr,s)
+  StrCopy(tempstr2,userTag)
+  UpperStr(tempstr)
+  p:=InStr(tempstr,' ') ->skip upto the first space so we don't highlight our own nick at the start of the message
+  IF p=-1 THEN p:=0
+
+  UpperStr(tempstr2)
+  IF InStr(tempstr+p,tempstr2)>=0
+    StrCopy(hl,'|16|10»|16|07')
+  ENDIF
+
+  IF plyr.useClock
+    getTime(timeStr)
+  ENDIF
   i:=0
   c:=0
-  StringF(tempstr,'\s ',timeStr)
+  StringF(tempstr,'\s\s',timeStr,hl)
+  
   StrCopy(tempCharStr,'#')
   StrCopy(lastColourCode,'')
   WHILE i<StrLen(s)
@@ -193,49 +788,63 @@ PROC add2Chat(s:PTR TO CHAR)
       StrAdd(tempstr,lastColourCode)
       i:=i+3
     ENDIF
-    IF c=(78-StrLen(timeStr))
+    IF c=(79-StrLen(timeStr))
       addChatLine(tempstr)
-      StringF(tempstr,'\s \s',timeStr,lastColourCode)
+      StringF(tempstr,'\s\s\s',timeStr,hl,lastColourCode)
       c:=0
     ENDIF
   ENDWHILE
   IF c>0 THEN addChatLine(tempstr)
 ENDPROC
 
+PROC updateStrings(s:PTR TO CHAR,m:PTR TO CHAR, u:PTR TO CHAR, nr:PTR TO CHAR, or:PTR TO CHAR)
+  DEF tempstr[255]:STRING
+  replaceStr(s,'%1',m)
+  replaceStr(s,'%2',u)
+  StringF(tempstr,'#\s',nr)
+  replaceStr(s,'%3',tempstr)
+  StringF(tempstr,'#\s',or)
+  replaceStr(s,'%4',tempstr)
+ENDPROC
+
 PROC pipeToAnsi(s:PTR TO CHAR)
   DEF clsStr[2]:STRING
   replaceStr(s,'|00','[30m')
-  replaceStr(s,'|01','[35m')
-  replaceStr(s,'|02','[36m')
-  replaceStr(s,'|03','[31m')
-  replaceStr(s,'|04','[32m')
-  replaceStr(s,'|05','[33m')
-  replaceStr(s,'|06','[34m')
-  replaceStr(s,'|07','[35m')
-  replaceStr(s,'|08','[36m')
-  replaceStr(s,'|09','[31m')
+  replaceStr(s,'|01','[34m')
+  replaceStr(s,'|02','[32m')
+  replaceStr(s,'|03','[36m')
+  replaceStr(s,'|04','[31m')
+  replaceStr(s,'|05','[35m')
+
+  replaceStr(s,'|06','[33m')
+  replaceStr(s,'|07','[0m')
+  replaceStr(s,'|08','[0m')
+  
+  replaceStr(s,'|09','[34m')
   replaceStr(s,'|10','[32m')
-  replaceStr(s,'|11','[33m')
-  replaceStr(s,'|12','[34m')
+  replaceStr(s,'|11','[36m')
+  replaceStr(s,'|12','[31m')
   replaceStr(s,'|13','[35m')
-  replaceStr(s,'|14','[36m')
-  replaceStr(s,'|15','[37m')
+  replaceStr(s,'|14','[33m')
+  replaceStr(s,'|15','[0m')
 
   replaceStr(s,'|16','[40m')
-  replaceStr(s,'|17','[45m')
-  replaceStr(s,'|18','[46m')
-  replaceStr(s,'|19','[41m')
-  replaceStr(s,'|20','[42m')
-  replaceStr(s,'|21','[43m')
-  replaceStr(s,'|22','[44m')
-  replaceStr(s,'|23','[45m')
-  replaceStr(s,'|24','[46m')
-  replaceStr(s,'|25','[41m')
+  replaceStr(s,'|17','[44m')
+  replaceStr(s,'|18','[42m')
+  replaceStr(s,'|19','[46m')
+  replaceStr(s,'|20','[41m')
+  replaceStr(s,'|21','[45m')
+  replaceStr(s,'|22','[43m')
+
+  replaceStr(s,'|23','[40m') 
+  replaceStr(s,'|24','[40m')
+  
+  replaceStr(s,'|25','[45m')
   replaceStr(s,'|26','[42m')
-  replaceStr(s,'|27','[43m')
-  replaceStr(s,'|28','[44m')
+  replaceStr(s,'|27','[46m')
+  replaceStr(s,'|28','[41m')
   replaceStr(s,'|29','[45m')
-  replaceStr(s,'|30','[46m')
+  replaceStr(s,'|30','[43m')
   replaceStr(s,'|31','[47m')
   
   StringF(clsStr,'\c',12)
@@ -243,7 +852,7 @@ PROC pipeToAnsi(s:PTR TO CHAR)
 ENDPROC
 
 PROC addChatLine(s:PTR TO CHAR)  
-  DEF i
+  DEF i,fh
   DEF tempstr[255]:STRING
   StrCopy(tempstr,s)
 
@@ -253,6 +862,14 @@ PROC addChatLine(s:PTR TO CHAR)
     StrCopy(chatLines[i-1],chatLines[i])
   ENDFOR
   StrCopy(chatLines[ListLen(chatLines)-1],tempstr)
+  
+  fh:=Open(chatLog,MODE_READWRITE)
+  IF fh<>0
+    StrAdd(tempstr,'\n')
+    Seek(fh,0,OFFSET_END)
+    Write(fh,tempstr,StrLen(tempstr))
+    Close(fh)
+  ENDIF
   
 ENDPROC
 
@@ -279,11 +896,11 @@ PROC showWelcome()
   DEF tempstr[255]:STRING
   -> Welcome info text [sf]
   
-  StringF(tempstr,'|14* |10Welcome to \s',mrcVersion)
+  StringF(tempstr,'* |10Welcome to \s',mrcVersion)
   add2Chat(tempstr)
-  add2Chat('|14* |11UP|10/|11DN|10 arrows to change your chat text color and |11TAB|10 for nick completion')
-  add2Chat('|14* |11ESC|10 to clear input buffer')
-  add2Chat('|14* |10The bottom-right heartbeat indicates your status with BBS and server')
+  add2Chat('* |11ESC|10 to clear input buffer, |15UP|10/|15DN|10 arrows for buffer history')
+  add2Chat('* |10and to change your chat text color and |11TAB|10 for nick completion')
+  add2Chat('* |10The bottom-right heartbeat indicates your status with BBS and server')
 
   StringF(tempstr,'|14* |10Your maximum message length is \d characters',iMaxBuffer)
   add2Chat(tempstr)
@@ -345,32 +962,40 @@ PROC joinRoom(s:PTR TO CHAR,b)
       StringF(tempstr,'NEWROOM:\s:\s',myRoom,newRoom)
       sendToServer(tempstr)
       IF b
-        StringF(tempstr,'|07- |10You have left room |02\s',oldRoom)
+        StrCopy(tempstr,plyr.leaveRoomMe)
+        updateStrings(tempstr,plyr.name,'',newRoom,oldRoom)
         sendToMe(tempstr)
-        StringF(tempstr,'|07- |02\s |10has left the room.',userTag)
+        StrCopy(tempstr,plyr.leaveRoomRoom)
+        updateStrings(tempstr,plyr.name,'',newRoom,oldRoom)
         sendToRoomNotMe(tempstr)
         StrCopy(myRoom,newRoom)
-        StringF(tempstr,'|07- |11You are now in |02\s',newRoom)
+        StrCopy(tempstr,plyr.enterRoomMe)
+        updateStrings(tempstr,plyr.name,'',newRoom,oldRoom)
         sendToMe(tempstr)
-        StringF(tempstr,'|07- |11\s |03has entered the room.',userTag)
+        StrCopy(tempstr,plyr.enterRoomRoom)
+        updateStrings(tempstr,plyr.name,'',newRoom,oldRoom)
         sendToRoomNotMe(tempstr)
       ENDIF
       StrCopy(myRoom,newRoom)
       ->SetPromptInfo(4,'#'+S)
-      ->UpdateScreen
+      updateHeader()
       sendToServer('USERLIST')
     ENDIF
   ENDIF
 ENDPROC
+
+
 
 PROC enterChat()
   DEF tempstr[255]:STRING
   showTitle()
   showWelcome()
 
-  add2Chat('|07- |15You have entered chat')
-  add2Chat('')
-  StringF(tempstr,'|07- |11\s |03has arrived!',userTag)
+  StrCopy(tempstr,plyr.enterChatMe)
+  updateStrings(tempstr,plyr.name,'',myRoom,myRoom)
+  add2Chat(tempstr)
+  StrCopy(tempstr,plyr.enterChatRoom)
+  updateStrings(tempstr,plyr.name,'',myRoom,myRoom)
   sendToAllNotMe(tempstr)
   Delay(20)
   sendToServer('IAMHERE')
@@ -392,29 +1017,64 @@ PROC check_separator(data,outSep)
   ENDIF
 ENDPROC
 
+PROC findSplitBufferPos(buffer,sep,num)
+  DEF count=0
+  DEF s=-1
+  DEF res=0
+  
+  WHILE((s:=InStr(buffer,sep,s+1))<>-1) AND (count<num)
+    count++
+    res:=s
+  ENDWHILE
+  
+ENDPROC res
+
 PROC splitBuffer(buffer,sep)
-  DEF count=1
-  DEF s=-1,l
+  DEF count=0
+  DEF olds,s=-1,l
   DEF tdat: PTR TO LONG
   
   l:=StrLen(buffer)
-  WHILE(s:=InStr(buffer,sep,s+1))<>-1
-    IF (s+1)<>l THEN count++
-  ENDWHILE
+  IF l>0
+    count:=1
+    WHILE(s:=InStr(buffer,sep,s+1))<>-1
+      IF (s+1)<>l THEN count++
+    ENDWHILE
+  ENDIF
 
   tdat:=List(count)
   
-  ListAdd(tdat,[buffer])
   s:=-1
+  olds:=s
   WHILE(s:=InStr(buffer,sep,s+1))<>-1
-    buffer[s]:=0
-    IF (s+1)<>l THEN ListAdd(tdat,[buffer+s+1])
+    listAddNewString(tdat,buffer+olds+1,s-olds-1)
+    olds:=s
   ENDWHILE
-  
+  IF (olds+1)<>l THEN listAddNewString(tdat,buffer+olds+1)
 ENDPROC tdat
 
+PROC releaseStringList(list:PTR TO LONG)
+  DEF i
+  FOR i:=0 TO ListLen(list)-1
+    DisposeLink(list[i])
+  ENDFOR
+  DisposeLink(list)
+ENDPROC
+
 PROC stats(s:PTR TO CHAR)
-->incoming stats
+  DEF tempstr[255]:STRING
+  DEF wordList:PTR TO LONG
+  
+  StrCopy(tempstr,s)
+  wordList:=splitBuffer(tempstr,' ')
+  StringF(mrcStats,':: Server Stats >> BBSes:\s Rooms:\s Users:\s',wordList[0],wordList[1],wordList[2])
+  releaseStringList(wordList)
+  loadBanners()
+ENDPROC
+
+PROC latency(s:PTR TO CHAR)
+  latencyVal:=Val(s)
+  IF latencyVal>999 THEN latencyVal:=999
 ENDPROC
 
 PROC message(s:PTR TO CHAR)
@@ -422,26 +1082,24 @@ PROC message(s:PTR TO CHAR)
   showChat()
 ENDPROC
 
-PROC banner(s:PTR TO CHAR)
-  add2Chat(s)
-  showChat()
-ENDPROC
 
 PROC roomTopic(room:PTR TO CHAR,topic:PTR TO CHAR)
-  StrCopy(currRoom,room)
-  StrCopy(currTopic,topic)
-  updateHeader()
+  IF StrCmp(room,myRoom)
+    StrCopy(myTopic,topic)
+    updateHeader()
+  ENDIF
 ENDPROC
 
 PROC userList(s:PTR TO CHAR)
   DEF i
-  currCount:=1
-  IF (roomUsers<>NIL)
-    Dispose(roomUsers)
+  currCount:=0
+  IF (s>StrMax(roomUsers))
+    DisposeLink(roomUsers)
     roomUsers:=String(StrLen(s)+200)
-    StringF(roomUsers,',\s,',s)
-    replaceStr(roomUsers,' ','')
   ENDIF
+  StrCopy(roomUsers,s)
+
+  IF StrLen(s)>0 THEN currCount:=1
   FOR i:=0 TO StrLen(s)-1
    IF s[i]="," THEN currCount++
   ENDFOR
@@ -463,49 +1121,66 @@ ENDPROC
 PROC doHelp()
   DEF tempstr[255]:STRING
   StringF(tempstr,'\c[0;44m \l\s[67][0m',12,'MULTI RELAY CHAT COMMANDS')
-  WriteStr(diface,tempstr,LF)
-  WriteStr(diface,'.------------------------------------------------------------------.',LF)
-  WriteStr(diface,'| /B <text>                   Broadcast message to all channels    |',LF)
-  WriteStr(diface,'| /CLS                        Clears window and scrollback text    |',LF)
-  WriteStr(diface,'| /MSG or /M <user> <text>    Sends a private message              |',LF)
-  WriteStr(diface,'| /TELL or /T <user> <text>   Sends a private message              |',LF)
-  WriteStr(diface,'| /TOPIC <text>               Set the TOPIC of the current channel |',LF)
-  WriteStr(diface,'| /WHO                        List all users on current BBS system |',LF)
-  WriteStr(diface,'| /ME <text>                  Perform an action                    |',LF)
-  WriteStr(diface,'| /JOIN <channel>             Join a new channel [name]            |',LF)
-  WriteStr(diface,'| /SCROLL                     Enter scrollback mode                |',LF)
-  WriteStr(diface,'| /Q or /QUIT                 Leave/Quit Multi Relay Chat          |',LF)
-  WriteStr(diface,'|------------------------------------------------------------------|',LF)
-  WriteStr(diface,'| /WHOON      List all users bbs   /ROOMS       List all rooms     |',LF)
-  WriteStr(diface,'| /BBSES      List all BBS''s       /USERS       List all users     |',LF)
-  WriteStr(diface,'| /CHANNEL    List channel users   /INFO        Show info on BBS   |',LF)
-  WriteStr(diface,'| /CHATTERS   List all users room  /DLCHATLOG   Download chat log  |',LF)
-  WriteStr(diface,'| /CHANGES    List of changes      /HELP        Show server help   |',LF)
-  WriteStr(diface,'| /VERSION    Check client and server versions                     |',LF)
-  WriteStr(diface,'| /SET        Set various fields to your account (/SET HELP)       |',LF)
-  WriteStr(diface,'`------------------------------------------------------------------''',LF)
-  SendStrDataCmd(diface,DT_TIMEOUT,'300',0)
-  HotKey(diface,'')
-  SendStrDataCmd(diface,DT_TIMEOUT,'1',0)
+  writeStr(tempstr,LF)
+  writeStr('.------------------------------------------------------------------.',LF)
+  writeStr('| /B <text>                   Broadcast message to all channels    |',LF)
+  writeStr('| /CLS                        Clears window and scrollback text    |',LF)
+  writeStr('| /MSG or /M <user> <text>    Sends a private message              |',LF)
+  writeStr('| /TELL or /T <user> <text>   Sends a private message              |',LF)
+  writeStr('| /TOPIC <text>               Set the TOPIC of the current channel |',LF)
+  writeStr('| /WHO                        List all users on current BBS system |',LF)
+  writeStr('| /ME <text>                  Perform an action                    |',LF)
+  writeStr('| /JOIN <channel>             Join a new channel [name]            |',LF)
+  writeStr('| /SCROLL                     Enter scrollback mode                |',LF)
+  writeStr('| /Q or /QUIT                 Leave/Quit Multi Relay Chat          |',LF)
+  writeStr('|------------------------------------------------------------------|',LF)
+  writeStr('| /WHOON      List all users bbs   /ROOMS       List all rooms     |',LF)
+  writeStr('| /BBSES      List all BBS''s       /USERS       List all users     |',LF)
+  writeStr('| /CHANNEL    List channel users   /INFO        Show info on BBS   |',LF)
+  writeStr('| /CHATTERS   List all users room  /DLCHATLOG   Download chat log  |',LF)
+  writeStr('| /CHANGES    List of changes      /HELP        Show server help   |',LF)
+  writeStr('| /VERSION    Check client and server versions                     |',LF)
+  writeStr('| /SET        Set various fields to your account (/SET HELP)       |',LF)
+  writeStr('`------------------------------------------------------------------''',LF)
+  sendCommandString(JH_HK,0,tempstr)
   showTitle()
   showChat()
 ENDPROC
 
 PROC showChanges()
-->does nothing yet
+  -> Changes info text [sf]
+  add2Chat('* |15List of changes from MRC v1.1')
+  add2Chat('* |10Completely redesigned Input routine [sf]')
+  add2Chat('* |10Ability to receive chat while typing (non-blocking) [sf]')
+  add2Chat('* |10Built-in input buffer history [sf]')
+  add2Chat('* |10Chat text color changing using PgUp and PgDn [sf]')
+  add2Chat('* |10Visual indicator when your nick is mentioned [sf]')
+  add2Chat('* |10Input buffer with color coded characters counter [sf]')
+  add2Chat('* |10Server latency and synchronization heartbeat indicator [sf]')
+  add2Chat('* |10Enlarged view port, more lines are available for the chat [sf]')
+  add2Chat('* |10Customizable information scroller [sf]')
+  add2Chat('* |10Improvement of performance and responsiveness of the interface [sf]')
+  add2Chat('* |10Brand new backend for improved speed and scalability [sf]')
+  add2Chat('* |10Nick auto-completion using TAB [sf]')
+  add2Chat('* |10Reply to last private message using /r [sf]')
+  showChat()
 ENDPROC
 
 PROC doBroadcast(s:PTR TO CHAR)
   DEF tempStr[255]:STRING
-  StringF(tempStr,'|15* |08(|15\s|08/|14Broadcast|08) |07\s',userTag,s)
+  StringF(tempStr,'|15* |08(|15\s|08/|14Broadcast|08) |07\s',plyr.name,s)
   sendToAll(tempStr)
 ENDPROC
 
 PROC leaveChat()
   DEF tempStr[255]:STRING
 
-  add2Chat('|07- |15You have left chat.')
-  StringF(tempStr,'|07- |12\s |04has left chat.',userTag)
+  StrCopy(tempStr,plyr.leaveChatMe)
+  updateStrings(tempStr,plyr.name,'',myRoom,myRoom)
+  add2Chat(tempStr)
+
+  StrCopy(tempStr,plyr.leaveChatRoom)
+  updateStrings(tempStr,plyr.name,'',myRoom,myRoom)
   sendToAllNotMe(tempStr)
   showChat()
   Delay(25)
@@ -515,8 +1190,176 @@ ENDPROC
 
 PROC doMeAction(s:PTR TO CHAR)
   DEF tempStr[255]:STRING
-  StringF(tempStr,'|15* |13\s \s',userTag,s)
+  StringF(tempStr,'|15* |13\s \s',plyr.name,s)
   sendToRoom(tempStr)
+ENDPROC
+
+PROC doSetHelp()
+  DEF b=FALSE
+
+  b:=plyr.useClock
+  plyr.useClock:=FALSE
+  add2Chat('|15/SET |08<|03tag|08> <|03text|08>')
+  add2Chat('|11Use |15SET |11to set various fields to your account')
+  add2Chat('|15HELP            |03This helps message')
+  add2Chat('|15LIST            |03List all fields and tabs')
+  add2Chat('|15ENTERCHATME     |03Displayed to |11me |03when I enter chat.')
+  add2Chat('|15ENTERCHATROOM   |03Displayed to |11room |03when I enter chat.')
+  add2Chat('|15ENTERROOMME     |03Displayed to |11me |03when I enter room.' )
+  add2Chat('|15ENTERROOMROOM   |03Displayed to |11room |03when I enter room.' )
+  add2Chat('|15LEAVECHATME     |03Displayed to |11me |03when I leave chat.' )
+  add2Chat('|15LEAVECHATROOM   |03Displayed to |11room |03when I leave chat.' )
+  add2Chat('|15LEAVEROOMME     |03Displayed to |11me |03when I leave room.')
+  add2Chat('|15LEAVEROOMROOM   |03Displayed to |11room |03when I leave room.')
+  add2Chat('|15DEFAULTROOM     |03Join this room when you join chat.')
+  add2Chat('|15NICKCOLOR       |03Change my nickname color |11(MCI Pipe codes).' )
+  add2Chat('|15LTBRACKET       |03Change my left bracket / color |11(MCI Pipe codes).' )
+  add2Chat('|15RTBRACKET       |03Change my right bracket / color |11(MCI Pipe codes).' )
+  add2Chat('|15USECLOCK        |03(|15Y|03/|15N|03) Use timestamp in chat')
+  add2Chat('|15CLOCKFORMAT     |1112 |03or |1124 |03hour clock format')
+  showChat()
+  plyr.useClock:=b
+ENDPROC
+
+PROC doSetList()
+  DEF s[10]:STRING
+  DEF r[20]:STRING
+  DEF temp[255]:STRING
+  DEF b=FALSE
+
+  IF plyr.useClock THEN StrCopy(s,'True') ELSE StrCopy(s,'False')
+
+  IF plyr.clockFormat=FALSE THEN StrCopy(r,'24Hour (HH:MM)') ELSE StrCopy(r,'12Hour (HH:MMa or HHMMp)')
+
+  b:=plyr.useClock
+  plyr.useClock:=FALSE
+  add2Chat('|11List of current |15/SET |11values from your account')
+  StringF(temp,'|15ENTERCHATME   |08:|07 \s',plyr.enterChatMe)
+  add2Chat(temp)
+  StringF(temp,'|15ENTERCHATROOM |08:|07 \s',plyr.enterChatRoom)
+  add2Chat(temp)
+  StringF(temp,'|15ENTERROOMME   |08:|07 \s',plyr.enterRoomMe)
+  add2Chat(temp)
+  StringF(temp,'|15ENTERROOMROOM |08:|07 \s',plyr.enterRoomRoom)
+  add2Chat(temp)
+  StringF(temp,'|15LEAVECHATME   |08:|07 \s',plyr.leaveChatMe)
+  add2Chat(temp)
+  StringF(temp,'|15LEAVECHATROOM |08:|07 \s',plyr.leaveChatRoom)
+  add2Chat(temp)
+  StringF(temp,'|15LEAVEROOMME   |08:|07 \s',plyr.leaveRoomMe)
+  add2Chat(temp)
+  StringF(temp,'|15LEAVEROOMROOM |08:|07 \s',plyr.leaveRoomRoom)
+  add2Chat(temp)
+  StringF(temp,'|15DEFAULTROOM   |08:|07 \s',plyr.defaultRoom)
+  add2Chat(temp)
+  StringF(temp,'|15NICKCOLOR     |08:|07 \s\s',plyr.nameColor,plyr.name)
+  add2Chat(temp)
+  StringF(temp,'|15LTBRACKET     |08:|07 \s',plyr.ltBracket)
+  add2Chat(temp)
+  StringF(temp,'|15RTBRACKET     |08:|07 \s',plyr.rtBracket)
+  add2Chat(temp)
+  StringF(temp,'|15USECLOCK      |08:|07 \s',s)
+  add2Chat(temp)
+  StringF(temp,'|15CLOCKFORMAT   |08:|07 \s',r)
+  add2Chat(temp)
+  showChat()
+  plyr.useClock:=b
+ENDPROC
+
+PROC changeClock(t,l:PTR TO CHAR)
+  DEF s[255]:STRING
+  StrCopy(s,TrimStr(l))
+  UpperStr(s)
+
+  SELECT t
+    CASE 1
+      IF (InStr(s,'YE') >= 0) OR (InStr(s,'TR') >= 0)
+        plyr.useClock:=TRUE
+        add2Chat('|11USECLOCK      |08: |15True')
+      ELSEIF (InStr(s,'NO') >= 0) OR (InStr(s,'FA') >= 0)
+        plyr.useClock:=FALSE
+        add2Chat('|11USECLOCK      |08: |15False')
+      ELSE
+        add2Chat('|11Usage: |15/SET USECLOCK YES||TRUE|08 or |15/SET USECLOCK NO||FALSE')
+      ENDIF
+      showChat()
+    CASE 2
+    IF StrCmp('12',s)
+      plyr.clockFormat:=TRUE
+      add2Chat('|07CLOCKFORMAT   |08: |0712 hour')
+    ELSE
+      IF StrCmp('24',s)
+          plyr.clockFormat:=FALSE
+          add2Chat('|07CLOCKFORMAT   |08: |0724 hour')
+        ELSE
+          add2Chat('|11Usage: |08"|03/SET CLOCKFORMAT 12|08" or "|03/SET CLOCKFORMAT 24|08"')
+        ENDIF
+    ENDIF
+    showChat()
+  ENDSELECT
+  savePlyr(plyr.recIdx)
+ENDPROC
+
+PROC doDebugAction()
+  DEF i
+  FOR i:=0 TO ListLen(bannerList)-1
+    add2Chat(bannerList[i])
+  ENDFOR
+  showChat()
+ENDPROC
+
+PROC doSetAction(s:PTR TO CHAR)
+  DEF tag[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF p=0
+  DEF wordList:PTR TO LONG
+
+  StrCopy(tempstr,s)
+  wordList:=splitBuffer(tempstr,' ')
+  IF ListLen(wordList)>0 THEN StrCopy(tag,wordList[0])
+  p:=StrLen(tag)+1
+  s:=TrimStr(s+p)
+  releaseStringList(wordList)
+
+  UpperStr(tag)
+  
+  IF StrCmp(tag,'HELP')
+    doSetHelp()
+  ELSEIF StrCmp(tag,'LIST')
+    doSetList()
+  ELSEIF StrCmp(tag,'ENTERCHATME')
+    AstrCopy(plyr.enterChatMe,s,80)
+  ELSEIF StrCmp(tag,'ENTERCHATROOM')
+    AstrCopy(plyr.enterChatRoom,s,80)
+  ELSEIF StrCmp(tag,'ENTERROOMME')
+    AstrCopy(plyr.enterRoomMe,s,80)
+  ELSEIF StrCmp(tag,'ENTERROOMROOM')
+    AstrCopy(plyr.enterRoomRoom,s,80)
+  ELSEIF StrCmp(tag,'LEAVECHATME')
+    AstrCopy(plyr.leaveChatMe,s,80)
+  ELSEIF StrCmp(tag,'LEAVECHATROOM')
+    AstrCopy(plyr.leaveChatRoom,s,80)
+  ELSEIF StrCmp(tag,'LEAVEROOMME')
+    AstrCopy(plyr.leaveRoomMe,s,80)
+  ELSEIF StrCmp(tag,'LEAVEROOMROOM')
+    AstrCopy(plyr.leaveRoomRoom,s,80)
+  ELSEIF StrCmp(tag,'DEFAULTROOM')
+    AstrCopy(plyr.defaultRoom,s,80)
+  ELSEIF StrCmp(tag,'NICKCOLOR')
+    changeNick("C",s,FALSE)
+  ELSEIF StrCmp(tag,'LTBRACKET')
+    changeNick("L",s,FALSE)
+  ELSEIF StrCmp(tag,'RTBRACKET')
+    changeNick("R",s,FALSE)
+  ELSEIF StrCmp(tag,'USECLOCK')
+    changeClock(1,s)
+  ELSEIF StrCmp(tag,'CLOCKFORMAT')
+    changeClock(2,s)
+  ELSEIF StrCmp(tag,'')
+    doSetHelp()
+  ENDIF
+  savePlyr(plyr.recIdx)
+
 ENDPROC
 
 PROC doPrivateMessage(s:PTR TO CHAR)
@@ -528,9 +1371,9 @@ PROC doPrivateMessage(s:PTR TO CHAR)
   p:=InStr(s,' ')
   StrCopy(toName,s,p)
 
-  StringF(tempStr,'|15* |08(|15\s|08/|14PrivMsg|08) |07\s',userTag,TrimStr(s+p))
+  StringF(tempStr,'|15* |08(|15\s|08/|14PrivMsg|08) |07\s',plyr.name,TrimStr(s+p))
   sendToUser(toName,tempStr)
-  StringF(tempStr,'|15* |08(|14PrivMsg|08->|15\s|08) |07',userTag,TrimStr(s+p))
+  StringF(tempStr,'|15* |08(|14PrivMsg|08->|15\s|08) |07',toName,TrimStr(s+p))
   add2Chat(tempStr)
   showChat()
 ENDPROC
@@ -549,20 +1392,24 @@ ENDPROC
 PROC checkUserList(userName:PTR TO CHAR)
   DEF tempStr[255]:STRING
   DEF newUsers
+  DEF users2
   IF StrCmp(userName,'SERVER') OR StrCmp(userName,'CLIENT') THEN RETURN
   StringF(tempStr,',\s,',userName)
-  IF InStr(roomUsers,tempStr)=-1
+  users2:=String(StrLen(roomUsers)+2)
+  StringF(users2,',\s,',roomUsers)
+  IF InStr(users2,tempStr)=-1
     IF (StrLen(roomUsers)+StrLen(userName)+1)>=StrMax(roomUsers)
-      newUsers:=String(StrLen(roomUsers)+200)
-      StringF(newUsers,'\s\s,',roomUsers,userName)
-      Dispose(roomUsers)
+      newUsers:=String(StrLen(roomUsers)+StrLen(userName)+200)
+      StringF(newUsers,'\s,\s',roomUsers,userName)
+      DisposeLink(roomUsers)
       roomUsers:=newUsers
     ELSE
-      StrAdd(roomUsers,userName)
       StrAdd(roomUsers,',')
+      StrAdd(roomUsers,userName)
     ENDIF
     updateFooter()
   ENDIF
+  DisposeLink(users2)
 ENDPROC
 
 PROC processUserInput(s:PTR TO CHAR)
@@ -577,6 +1424,8 @@ PROC processUserInput(s:PTR TO CHAR)
         doCls()
       ELSEIF StrCmp(tempstr,'/?')
         doHelp()
+      ELSEIF StrCmp(tempstr,'/DLCHATLOG',10)
+        dlChatLog()
       ELSEIF StrCmp(tempstr,'/B ',3)
         doBroadcast(s+3)
       ELSEIF StrCmp(tempstr,'/Q') OR StrCmp(tempstr,'/QUIT')
@@ -586,6 +1435,10 @@ PROC processUserInput(s:PTR TO CHAR)
         joinRoom(s+6,TRUE)
       ELSEIF StrCmp(tempstr,'/ME ',4)
         doMeAction(s+4)
+      ELSEIF StrCmp(tempstr,'/SET ',5)
+        doSetAction(s+5)
+      ELSEIF StrCmp(tempstr,'/DEBUG',6)
+        doDebugAction()
       ELSEIF StrCmp(tempstr,'/TOPIC ',7)
         changeTopic(s+7)
       ELSEIF StrCmp(tempstr,'/MOTD')
@@ -621,9 +1474,8 @@ PROC processUserInput(s:PTR TO CHAR)
         add2Chat(tempstr)
       ENDIF            
       
-/*                '/DLCHATLOG' : DLChatLog
-                '/SCROLL'    : DoScrollBack
-                '/WHO'       : DoWho*/
+/*        '/SCROLL'    : DoScrollBack
+          '/WHO'       : DoWho*/
       
     ELSE
       StringF(tempstr,'\s|\r\z\d[2]\s',myNamePrompt,inputColour,s)
@@ -644,6 +1496,7 @@ PROC processServerResponse(r:PTR TO CHAR)
   DEF msg[255]:STRING
   DEF tmpstr[255]:STRING
   DEF params:PTR TO LONG
+  DEF ok2Send=TRUE
   
   packet:=splitBuffer(r,'~')
   IF ListLen(packet)>6
@@ -659,39 +1512,266 @@ PROC processServerResponse(r:PTR TO CHAR)
       StrCopy(tmpstr,msg)
       params:=splitBuffer(tmpstr,':')
       IF StrCmp(params[0],'BANNER')
-        banner(params[1])
+        ok2Send:=FALSE
+        addBanner(params[1])
       ELSEIF StrCmp(params[0],'ROOMTOPIC')
+        ok2Send:=FALSE
         roomTopic(params[1],params[2])
       ELSEIF StrCmp(params[0],'USERLIST')
+        ok2Send:=FALSE
         userList(params[1])
+      ELSEIF StrCmp(params[0],'LATENCY')
+        ok2Send:=FALSE
+        latency(params[1])
       ELSEIF StrCmp(params[0],'STATS')
+        ok2Send:=FALSE
         stats(params[1])
       ELSEIF StrCmp(params[0],'HELLO')
+        ok2Send:=FALSE
         sendToServer('IAMHERE')
-      ELSE
-        message(msg)
       ENDIF
-      Dispose(params)
+      releaseStringList(params)
     ELSEIF StrCmp(touser,'SERVER')
       IF StrCmp(msg,'LOGOFF')
         logoff(fromuser)
+        ok2Send:=FALSE
       ENDIF
-    ELSEIF (StrLen(touser)=0) OR (strCmpi(touser,userTag))
-      IF (StrLen(toroom)=0) OR (StrCmp(toroom,myRoom))
-        checkUserList(fromuser)
-        message(msg)
-      ENDIF
-    ELSEIF StrCmp(touser,'NOTME') AND (strCmpi(fromuser,userTag)=FALSE)
-      checkUserList(fromuser)
-      message(msg)
     ENDIF
+    
+    IF (StrLen(toroom)<>0) AND (strCmpi(toroom,myRoom)=FALSE) THEN ok2Send:=FALSE
+       
+    IF StrLen(touser)>0
+      IF (StrCmp(touser,'NOTME')=FALSE) AND (strCmpi(touser,userTag)=FALSE) THEN ok2Send:=FALSE
+    ENDIF
+
+    IF strCmpi(fromuser,userTag) AND strCmpi(touser,'NOTME') THEN ok2Send:=FALSE
 
     IF (StrCmp(fromuser,'SERVER')=FALSE) AND (StrCmp(fromuser,'CLIENT')=FALSE)
       IF strCmpi(touser,userTag) THEN StrCopy(lastPrivMsg,fromuser)
     ENDIF
-  ENDIF
-  Dispose(packet)
 
+    IF ok2Send 
+      message(msg)
+      checkUserList(fromuser)
+    ENDIF
+  ENDIF
+  releaseStringList(packet)
+
+ENDPROC
+
+PROC changeNick(lrnc,n:PTR TO CHAR,announce)
+  DEF tmp[255]:STRING
+  
+  SELECT lrnc
+    CASE "N"
+      StrCopy(tmp,n)
+      stripMCI(tmp)
+      AstrCopy(plyr.name,tmp,80)
+
+    -> Limit left bracket to 1 visible character [sf]
+    CASE "L"
+      StrCopy(tmp,n)
+      stripMCI(tmp)
+      IF StrLen(tmp)>1
+        showError('Left bracket max length is 1 char')
+      ELSE
+        AstrCopy(plyr.ltBracket,n)
+      ENDIF
+
+    -> Limit right bracket to 8 visible character [sf]
+    -> Record length stays at 16 for compatibility
+    CASE "R"
+      StrCopy(tmp,n)
+      stripMCI(tmp)
+      IF (StrLen(tmp)>8) OR (StrLen(n)>16)
+        showError('Right brackets max length is 8 chars (16 including Pipe codes)')
+      ELSE
+        AstrCopy(plyr.rtBracket,n)
+      ENDIF
+    -> Make sure Nick color is a color PIPE code [sf]
+    CASE "C"
+      StrCopy(tmp,n)
+      stripMCI(tmp)
+      IF (StrLen(tmp)>0) OR (StrLen(n)<>3)
+        showError('Only color pipe codes allowed for nick color')
+      ELSE
+        AstrCopy(plyr.nameColor,n)
+      ENDIF
+  ENDSELECT
+
+  savePlyr(plyr.recIdx)
+  StrCopy(tmp,plyr.name)
+  stripMCI(tmp)
+  StringF(myNamePrompt,'\s\s\s\s|16|07 ',plyr.ltBracket,plyr.nameColor,tmp,plyr.rtBracket)
+ENDPROC
+
+PROC addBanner(b:PTR TO CHAR)
+  DEF exist=FALSE
+  DEF i,n
+  
+  n:=ListLen(bannerList)
+  
+  FOR i:=0 TO n-1
+    IF StrCmp(bannerList[i],b) THEN exist:=TRUE
+  ENDFOR
+  
+  IF exist=FALSE
+    FOR i:=0 TO n-1
+      IF StrLen(bannerList[i])=0 
+        StrCopy(bannerList[i],b)
+        RETURN
+      ENDIF
+    ENDFOR
+  ENDIF
+ENDPROC
+
+PROC loadBanners()
+  StringF(bannerList[0],'\s\s',mrcVersion,mrcStats)
+  StrCopy(bannerList[1],'Find more about the connected BBSes using the /INFO command')
+  StrCopy(bannerList[2],'Give a try to the new nick auto-completion feature using the TAB key')
+  StrCopy(bannerList[3],'Reply to your last received private message using the /R shortcut')
+ENDPROC
+
+-> Select next banner from the defined list [sf]
+PROC nextBanner()
+  REPEAT
+    banIdx++
+    IF banIdx>=ListLen(bannerList) THEN banIdx:=0
+  UNTIL StrLen(bannerList[banIdx])>0
+  scrollWait:=0
+  bannerOff:=0
+ENDPROC
+
+PROC scrollBanner()
+  DEF bs[255]:STRING
+  DEF ban[80]:STRING
+
+  StringF(bs,'                                    \s',bannerList[banIdx])
+  stripMCI(bs)
+  
+  ->StringF(ban,'[2;43H[0m\s[1][36m\l\s[34][0m\s[1]',bs+bannerOff,bs+bannerOff+1,bs+bannerOff+35)
+  StringF(ban,'[2;43H[36m\l\s[36]',bs+bannerOff)
+  writeStr(ban,0)
+  
+  IF scrollWait<scrollDly
+    scrollWait++
+  ELSE    
+    bannerOff++
+  ENDIF
+  
+  IF bannerOff=StrLen(bs)
+    nextBanner()
+  ENDIF
+
+ENDPROC
+
+PROC init()
+  DEF y
+  DEF tempstr[255]:STRING
+  
+   IF strCmpi(userTag,'SERVER') OR strCmpi(userTag,'CLIENT') OR strCmpi(userTag,'NOTME')
+    StrCopy(tempstr,'|16|12|CL|CRUnfortunately, your User Alias is a reserved word and therefore cannot be used.')
+    pipeToAnsi(tempstr)
+    writeStr(tempstr,LF)
+    StrCopy(tempstr,'|12Please ask your SysOp to change your User Alias to use MRC.')
+    pipeToAnsi(tempstr)
+    writeStr(tempstr,LF)
+    Raise(ERR_EXCEPT)
+  ENDIF
+
+  roomUsers:=String(1000)
+  
+  y:=findPlyr()
+  IF y = 0 THEN newPlyr() ELSE readPlyr(y)
+  
+  changeNick("N",userTag,FALSE)
+  
+ENDPROC
+
+PROC getPrevBufferItem()
+  DEF count=0,found=FALSE
+  WHILE (found=FALSE) AND (count<ListLen(bufferHist))
+    bufferItem++
+    IF bufferItem=ListLen(bufferHist) THEN bufferItem:=0
+    count++
+    IF StrLen(bufferHist[bufferItem])>0 THEN found:=TRUE
+  ENDWHILE
+  IF found
+    StrCopy(inputStr,bufferHist[bufferItem])
+    cursorPos:=StrLen(inputStr)
+    charsEntered:=FALSE
+  ENDIF
+ENDPROC
+
+PROC getNextBufferItem()
+  DEF count=0,found=FALSE
+  WHILE (found=FALSE) AND (count<ListLen(bufferHist))
+    bufferItem--
+    IF bufferItem<0 THEN bufferItem:=ListLen(bufferHist)-1
+    count++
+    IF StrLen(bufferHist[bufferItem])>0 THEN found:=TRUE
+  ENDWHILE
+  IF found
+    StrCopy(inputStr,bufferHist[bufferItem])
+    cursorPos:=StrLen(inputStr)
+    charsEntered:=FALSE
+  ENDIF
+ENDPROC
+
+PROC dlChatLog()
+  DEF tempChat[255]:STRING
+  DEF ds[40]:STRING
+  DEF st[255]:STRING
+  DEF x[255]:STRING
+  DEF y[255]:STRING
+  DEF tempstr[255]:STRING
+  DEF tempstr2[255]:STRING
+  DEF fh,fh2
+  DEF key
+
+  getDateTime(ds)
+  replaceStr(ds,'-','')
+  replaceStr(ds,':','')
+  replaceStr(ds,' ','_')
+  StrCopy(st,siteTag)
+  replaceStr(st,' ','_')
+  StringF(tempChat,'PROGDIR:mrc_chat_\d_\s_\s.log',node,st,ds)
+  StringF(tempstr,'\c[0;36m Strip colour codes? ',12)
+  writeStr(tempstr,0)
+
+  REPEAT
+    sendCommandString(JH_HK,0,tempstr)
+    IF StrLen(tempstr)>0 THEN key:=tempstr[0] ELSE key:=0
+  UNTIL (key=-1) OR (key="y") OR (key="Y") OR (key="N") OR (key="n")
+
+  IF key<>-1
+    
+    IF (key="Y") OR (key="y")
+      fh:=Open(chatLog,MODE_OLDFILE)
+      fh2:=Open(tempChat,MODE_NEWFILE)
+      IF (fh<>0) AND (fh2<>0)
+        WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
+          stripAnsi(tempstr,tempstr2,0,0)
+          Fputs(fh2,tempstr2)
+        ENDWHILE
+      ENDIF
+      IF fh<>0 THEN Close(fh)
+      IF fh2<>0 THEN Close(fh2)
+      
+    ELSE
+      StringF(tempstr,'COPY \s \s',chatLog,tempChat)
+      Execute(tempstr,0,0)
+    ENDIF
+
+    IF FileLength(tempChat)>=0
+      ->download file tempchat
+      sendStrCommand(ZMODEMSEND,0,tempChat)
+    ENDIF
+  ENDIF
+
+  DeleteFile(tempChat)
+  showTitle()
+  showChat() 
 ENDPROC
 
 PROC main() HANDLE
@@ -708,49 +1788,77 @@ PROC main() HANDLE
   DEF tdat:PTR TO LONG
   DEF data
   DEF anim=0
-  
+
+  DEF wc,lw[255]:STRING,wl
+  DEF wordList:PTR TO LONG
+  DEF tail[10]:STRING
+  DEF pf[255]:STRING
+  DEF uMatch=FALSE
+  DEF sLoop=0
+  DEF uHandle[255]:STRING
+  DEF curoff=FALSE
+
+  ansi.ansicode:=0
+
   StrCopy(mrcVersion,'Multi Relay Chat door v1.2.9a [sf]')
   
+  StrCopy(mrcStats,'')
+  
+  StrCopy(userFile,'mrcusers.dat')
+
 	socketbase:=OpenLibrary('bsdsocket.library',2)
   IF socketbase=NIL
-    WriteStr(diface,'Unable to open bsdsocket.library',LF)
+    writeStr('Unable to open bsdsocket.library',LF)
     RETURN
   ENDIF
 
-  IF aedoorbase:=OpenLibrary('AEDoor.library',1)
-    diface:=CreateComm(arg[])     /* Establish Link   */
-    strfield:=GetString(diface)  /* Get a pointer to the JHM_String field. Only need to do this once */
-  ENDIF
+  node:=Val(arg)
+  comm:=createComm(node)
+  IF comm=FALSE THEN Raise(ERR_EXCEPT)
   
-  GetDT(diface,DT_NAME,0)
-  StrCopy(userTag,strfield)
+  StringF(chatLog,'PROGDIR:mrcchat\d.log',node)
+
+  sendCommandString(DT_NAME,1,userAlias)
+
+  StrCopy(userTag,userAlias)
   replaceStr(userTag,'~','')
+  replaceStr(userTag,' ','_')
+  stripMCI(userTag)
 
-  GetDT(diface,JH_BBSNAME,0)
-  StrCopy(siteTag,strfield)
+  sendCommandString(DT_SLOTNUMBER,1,tempstr)
+  userIndex:=Val(tempstr)
+
+  sendCommandString(DT_LINELENGTH,1,tempstr)
+  numLines:=Val(tempstr)
+
+  sendCommandString(JH_BBSNAME,1,siteTag)
+
   replaceStr(siteTag,'~','')
+  replaceStr(siteTag,' ','_')
+  stripMCI(siteTag)
 
-  GetDT(diface,501,0)
+  sendDataCommand(501,0)
 
-  StringF(myNamePrompt,'|03<|11\s|03>|16|07 ',userTag)
-
-
-  IF strCmpi(userTag,'SERVER') OR strCmpi(userTag,'CLIENT') OR strCmpi(userTag,'NOTME')
-    StrCopy(tempstr,'|16|12|CL|CRUnfortunately, your User Alias is a reserved word and therefore cannot be used.')
-    pipeToAnsi(tempstr)
-    WriteStr(diface,tempstr,LF)
-    StrCopy(tempstr,'|12Please ask your SysOp to change your User Alias to use MRC.')
-    pipeToAnsi(tempstr)
-    WriteStr(diface,tempstr,LF)
-    Raise(ERR_EXCEPT)
-  ENDIF
+  plyr:=NEW plyr
 
   updateMaxBuffersize()
 
-  chatLines:=List(20)
+  chatLines:=List(numLines-5)
   FOR i:=0 TO ListMax(chatLines)-1
-    ListAdd(chatLines,[String(255)])
+    listAddItem(chatLines,String(255))
   ENDFOR
+  
+  bufferHist:=List(10)
+  FOR i:=0 TO ListMax(bufferHist)-1
+    listAddItem(bufferHist,String(255))
+  ENDFOR
+  
+  bannerList:=List(20)
+  FOR i:=0 TO ListMax(bannerList)-1
+    listAddItem(bannerList,String(255))
+  ENDFOR
+  loadBanners()
+  nextBanner()
   
   mrcserver:=Socket(AF_INET,SOCK_STREAM,0)
 
@@ -770,28 +1878,73 @@ PROC main() HANDLE
   
   IF (res<>0) OR (Errno()<>0)
     StringF(tempstr,'Unable to connect to mrc proxy')
-    WriteStr(diface,tempstr,LF)
+    writeStr(tempstr,LF)
     Raise(ERR_EXCEPT)
   ENDIF
   
   IoctlSocket(mrcserver,FIONBIO,[1])
   
-  enterChat()
-  joinRoom('lobby',FALSE)
+  init()
   
-  SendStrDataCmd(diface,DT_TIMEOUT,'1',0)
+
+  enterChat()
+  joinRoom(plyr.defaultRoom,FALSE)
+
+  
   
   readBuffer:=New(8193)
+  loop:=0
+
+  sendDataCommand(705,1)  
   REPEAT
-    anim:=Eor(anim,1)
-    updateHeartbeat(anim)
+    loop++
+
+    Delay(1)
+    IF Mod(loop,scrollSpeed)=0
+      sendDataCommand(705,0)   ->console cursor off
+      curoff:=TRUE
+      scrollBanner()
+    ENDIF
+
+    IF Mod(loop,26)=0
+      IF curoff=FALSE 
+        sendDataCommand(705,0) ->console cursor off
+        curoff:=TRUE
+      ENDIF
+      
+      anim:=Eor(anim,1)
+      updateHeartbeat(anim)
+    ENDIF
+
+    IF curoff
+      restoreCursor()
+      sendDataCommand(705,1) ->console cursor on
+      curoff:=FALSE
+    ENDIF
     
+    IF Mod(loop,1999)=0
+      sendToServer('USERLIST')
+    ENDIF
+    
+    IF Mod(loop,997)=0
+      sendToClient('LATENCY')
+    ENDIF
+    
+    IF Mod(loop,11987)=0
+      sendToServer('IAMHERE')
+    ENDIF
+
+    IF loop>47948
+      sendToServer('BANNERS')
+      loop:=1
+    ENDIF
+
     b:=Recv(mrcserver,readBuffer,8192,0)
     IF b=-1
       e:=Errno()
       IF e<>EAGAIN
         StringF(tempstr,'socket error \d',e)
-        WriteStr(diface,tempstr,LF)
+        writeStr(tempstr,LF)
         Raise(ERR_EXCEPT)
       ENDIF
     ELSE
@@ -807,15 +1960,60 @@ PROC main() HANDLE
           ENDIF
           i++
         ENDWHILE
-        Dispose(tdat)
+        releaseStringList(tdat)
       ENDIF
     ENDIF
 
     updateMaxBuffersize()
     
-    m:=HotKey(diface,'')
+    m:=fetchKey()
     IF m>0
-      IF m=3
+      -> Nick auto-completion [sf]
+      IF m=9
+        StrCopy(tempstr2,inputStr)
+        wordList:=splitBuffer(tempstr2,' ')
+        
+        wc:=ListLen(wordList)       -> Count of words in buffer
+        IF wc>0 THEN StrCopy(lw,wordList[wc-1]) ELSE StrCopy(lw,'') -> Last word in buffer
+        wl:=StrLen(lw)  -> Length of the last word in buffer
+        releaseStringList(wordList)
+
+        -> Define display if at the beginning or mid-sentence
+        IF wc < 2 THEN StrCopy(tail,': ') ELSE StrCopy(tail,' ')
+
+        IF StrLen(lastUSearch)=0 THEN StrCopy(lastUSearch,lw)
+        IF (wl > 0) AND (StrLen(roomUsers) > 0)
+          IF wc>1
+            StrCopy(pf,inputStr,findSplitBufferPos(inputStr,' ',wc-1)+1)
+          ELSE
+            StrCopy(pf,'')
+          ENDIF
+          uMatch:=FALSE
+          sLoop:=0
+
+          WHILE (uMatch=FALSE)
+            IF userIdx > currCount THEN userIdx:=1
+            StrCopy(tempstr,roomUsers)
+            wordList:=splitBuffer(tempstr,',')
+            IF ListLen(wordList)>=userIdx THEN StrCopy(uHandle,wordList[userIdx-1])
+            releaseStringList(wordList)
+            IF (StrLen(uHandle) > 0) AND (strCmpi(lastUSearch,uHandle, StrLen(lastUSearch)))
+              uMatch:=TRUE
+              StringF(inputStr,'\s\s\s',pf,uHandle,tail)
+              cursorPos:=StrLen(inputStr)
+              displayCurrentInput()   
+            ENDIF
+            userIdx:=userIdx+1
+            sLoop:=sLoop+1
+            IF sLoop > currCount THEN uMatch:=TRUE
+          ENDWHILE
+        ENDIF
+      ELSE
+        StrCopy(lastUSearch,'')
+        userIdx:=1
+      ENDIF      
+
+      IF m=17
         IF exitChat=FALSE
           leaveChat()
           exitChat:=TRUE
@@ -824,25 +2022,48 @@ PROC main() HANDLE
         StrCopy(inputStr,'')
         updateFooter()        
         displayCurrentInput()    
-      ELSEIF (m=UPARROW) AND (inputColour<15)
+      ELSEIF (m=LEFTARROW) AND (cursorPos>0)
+        cursorPos--
+        displayCurrentInput()
+      ELSEIF (m=RIGHTARROW) AND (cursorPos<StrLen(inputStr))
+        cursorPos++
+        displayCurrentInput()
+      ELSEIF (m=UPARROW) AND (charsEntered) AND (inputColour<15)
         inputColour++
         displayCurrentInput()
-      ELSEIF (m=DOWNARROW)  AND (inputColour>9)
+      ELSEIF (m=DOWNARROW) AND (charsEntered) AND (inputColour>9)
         inputColour--
         displayCurrentInput()
+      ELSEIF (m=UPARROW) AND (charsEntered=FALSE)
+        getPrevBufferItem()
+        displayCurrentInput()
+      ELSEIF (m=DOWNARROW) AND (charsEntered=FALSE)
+        getNextBufferItem()
+        displayCurrentInput()
       ELSEIF (m=CHAR_BACKSPACE) 
-        IF StrLen(inputStr)>0
-          SetStr(inputStr,StrLen(inputStr)-1)
+        IF cursorPos>0
+          StrCopy(tempstr,'')
+          IF cursorPos>1 THEN StrAdd(tempstr,inputStr,cursorPos-1)
+          StrAdd(tempstr,inputStr+cursorPos)
+          StrCopy(inputStr,tempstr)
+          cursorPos--
           updateFooter()        
           displayCurrentInput()
+          charsEntered:=StrLen(inputStr)>0
         ENDIF
       ELSEIF (m>31) AND (m<126) AND (StrLen(inputStr)<iMaxBuffer)
         IF (m<>32) OR (StrLen(inputStr)>0)
-          StrCopy(tempstr,'#')
-          tempstr[0]:=m
-          StrAdd(inputStr,tempstr)
+          StrCopy(tempstr,'')
+          IF cursorPos>0 THEN StrAdd(tempstr,inputStr,cursorPos)
+          StrCopy(tempstr2,'#')
+          tempstr2[0]:=m
+          StrAdd(tempstr,tempstr2)
+          StrAdd(tempstr,inputStr+cursorPos)
+          StrCopy(inputStr,tempstr)
+          cursorPos++
           updateFooter()
           displayCurrentInput()
+          charsEntered:=TRUE
         ENDIF
       ELSEIF m=13
         IF StrLen(inputStr)>0
@@ -851,26 +2072,52 @@ PROC main() HANDLE
           ELSE
             StrCopy(tempstr2,inputStr)
           ENDIF
+          addToBufferHistory(inputStr)
           StrCopy(inputStr,'')
+          cursorPos:=0
           updateFooter()
           displayCurrentInput()
           processUserInput(tempstr2)
+          charsEntered:=FALSE
         ENDIF
       ENDIF
       
       IF (strCmpi(inputStr,'/R ',3)) AND (StrLen(lastPrivMsg)>0)
         StringF(inputStr,'/T \s ',lastPrivMsg)
+        cursorPos:=StrLen(inputStr)
         updateFooter()
         displayCurrentInput()
       ENDIF
     ENDIF
+    
+    IF m<0 THEN exitChat:=TRUE
   UNTIL exitChat
  
 EXCEPT DO
-  IF roomUsers<>NIL THEN Dispose(roomUsers)
+  IF bufferHist<>NIL
+    FOR i:=0 TO ListLen(bufferHist)-1
+      DisposeLink(bufferHist[i])
+    ENDFOR
+    DisposeLink(bufferHist)
+  ENDIF
+  IF bannerList<>NIL
+    FOR i:=0 TO ListLen(bannerList)-1
+      DisposeLink(bannerList[i])
+    ENDFOR
+    DisposeLink(bannerList)
+  ENDIF
+  IF chatLines<>NIL
+    FOR i:=0 TO ListLen(chatLines)-1
+      DisposeLink(chatLines[i])
+    ENDFOR
+    DisposeLink(chatLines)
+  ENDIF
+  IF FileLength(chatLog)>=0 THEN DeleteFile(chatLog)
+  IF roomUsers<>NIL THEN DisposeLink(roomUsers)
   IF readBuffer THEN Dispose(readBuffer)
   IF mrcserver<>-1 THEN CloseSocket(mrcserver)
   IF socketbase<>NIL THEN CloseLibrary(socketbase)
-  IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
-  IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
+  IF comm THEN deleteComm()
+  IF plyr<>NIL THEN END plyr
 ENDPROC
+

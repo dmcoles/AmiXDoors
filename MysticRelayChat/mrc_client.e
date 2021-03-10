@@ -55,7 +55,6 @@ DEF version[10]:STRING
 DEF platform_name[100]:STRING
 DEF system_name[100]:STRING
 DEF machine_arch[100]:STRING
-DEF debugflag=TRUE
 DEF version_string[255]:STRING
 DEF client_version[255]:STRING
 
@@ -67,6 +66,10 @@ DEF info_Sysop[255]:STRING
 DEF info_Desc[255]:STRING
 
 DEF mrcstats[255]:STRING
+
+DEF latency[3]:STRING
+
+DEF restart=0
 
 PROC strip(src:PTR TO CHAR,dest:PTR TO CHAR)
   DEF n,v=0
@@ -87,7 +90,7 @@ PROC openListenSocket(port)
   NEW servaddr
 
 	IF((server_s:=Socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		WriteF('ECHOSERV: Error creating listening socket. (\d)\b\n',Errno())
+		WriteF('Error creating listening socket. (\d)\b\n',Errno())
     END servaddr
 		RETURN FALSE,-1
 	ENDIF
@@ -100,14 +103,14 @@ PROC openListenSocket(port)
 	->WriteF('listening to port \d...\b\n', port)
 
 	IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
-		WriteF('ECHOSERV: Error calling bind() for port \d, error=\d\b\n',port,Errno());
+		WriteF('Error calling bind() for port \d, error=\d\b\n',port,Errno());
     CloseSocket(server_s)
     END servaddr
 		RETURN FALSE,-1
 	ENDIF
 
 	IF(Listen(server_s, LISTENQ) < 0)
-		WriteF('ECHOSERV: Error calling listen()\b\n')
+		WriteF('Error calling listen()\b\n')
     CloseSocket(server_s)
     END servaddr
     RETURN FALSE,-1
@@ -139,12 +142,12 @@ PROC removeClient(socket)
     IF userConn.socket<>socket
       ListAdd(tempList,[userConn]) 
     ELSE
-      Dispose(userConn)
+      END userConn
     ENDIF
   ENDFOR
   SetList(clients,0)
   ListAdd(clients,tempList)
-  Dispose(tempList)
+  DisposeLink(tempList)
 ENDPROC
 
 PROC setDefaults()
@@ -155,7 +158,6 @@ PROC setDefaults()
   StrCopy(system_name,'Amiga')
   StrCopy(machine_arch,'68K')
 
-  debugflag:=TRUE
   StringF(version_string,'\s/\s.\s/\s',platform_name, system_name, machine_arch, version)
   StringF(client_version,'Multi Relay Chat Client v\s [sf]',version)
 
@@ -197,7 +199,7 @@ PROC readConfiguration()
           StrCopy(info_Desc,cfgValue)
         ENDIF
       ENDIF
-      Dispose(cfgData)
+      DisposeLink(cfgData)
     ENDWHILE
     Close(f)
   ENDIF
@@ -237,8 +239,8 @@ PROC chatlog(data)
         Close(f)
       ENDIF
     ENDIF
-    Dispose(packet)
-    Dispose(data2)
+    DisposeLink(packet)
+    DisposeLink(data2)
   ENDIF
 ENDPROC
 
@@ -279,7 +281,7 @@ PROC logger(loginfo:PTR TO CHAR)
   strip(loginfo,tempstr)
   ->ltime = time.asctime(time.localtime(time.time()))
   WriteF('\s  \s\n',ltime,tempstr)
-  Dispose(tempstr)
+  DisposeLink(tempstr)
 ENDPROC
 
 -> Socket sender to server
@@ -293,14 +295,13 @@ PROC send_server(data:PTR TO CHAR)
     StrCopy(data2,data)
     IF data2[StrLen(data2)-1]<>'\n' THEN StrAdd(data2,'\n')
     r:=Send(mrcserver,data2,StrLen(data2),0)
-    Dispose(data2)
+    DisposeLink(data2)
     IF r=-1
       StringF(tempstr,'Connection error \d',Errno())
       logger(tempstr)
       Shutdown(mrcserver,2)
       CloseSocket(mrcserver)
     ENDIF
-    Dispose(data2)
   ENDIF
 ENDPROC
 /*
@@ -330,15 +331,14 @@ PROC send_mrc(userConn:PTR TO userConnection)
   b:=Recv(userConn.socket,readBuffer,8192,0)
   IF b<=0
     e:=Errno()
-    IF e<>EAGAIN
+    IF (e<>EAGAIN) AND (e<>53)
       StringF(tempstr,'unexpected=\d',e)
       logger(tempstr)
+      restart:=1
     ENDIF
     IF (e=ECONNRESET) OR (e=53)
-      logger('connection disconnect')
       IF StrLen(userConn.userName)>0
         StringF(tempstr,'\s~~~SERVER~~~LOGOFF~\n',userConn.userName)
-        logger(tempstr)
         deliver_mrc(tempstr)
         send_server(tempstr)
       ENDIF
@@ -365,33 +365,26 @@ PROC send_mrc(userConn:PTR TO userConnection)
           
           IF StrLen(userConn.userName)=0 THEN AstrCopy(userConn.userName,fromuser,255)
           
-          Dispose(mline)
-          Dispose(buf2)
+          DisposeLink(mline)
+          DisposeLink(buf2)
           IF StrCmp(message,'VERSION')
             StringF(tempstr,'CLIENT~~~\s~\s~~|07- \s~\n',fromuser,frombbs,client_version)
             deliver_mrc(tempstr)
             send_server(data)
+          ELSEIF StrCmp(touser,'CLIENT') AND (StrCmp(message,'LATENCY'))
+            StringF(tempstr,'SERVER~~~CLIENT~\s~~LATENCY:\s~\n',frombbs,latency)
+            deliver_mrc(tempstr)
           ELSEIF StrCmp(touser,'CLIENT') AND (StrCmp(message,'STATS'))
             StringF(tempstr,'SERVER~~~CLIENT~\s~~STATS:\s~\n',frombbs,mrcstats)
             deliver_mrc(tempstr)
           ELSE
             send_server(data)
           ENDIF
-
-          IF debugflag
-            StringF(tempstr,'OUT: \s',data)
-            logger(tempstr)
-          ENDIF
-        ELSE
-          IF debugflag 
-            StringF(tempstr,'invalid packet received')
-            logger(tempstr)
-          ENDIF
         ENDIF  
       ENDIF
       i++
     ENDWHILE
-    Dispose(tdat)
+    DisposeLink(tdat)
 
   ENDIF
   Dispose(readBuffer)
@@ -428,13 +421,8 @@ PROC deliver_mrc(server_data)
     StringF(tempstr,'Bad packet: \s',server_data)
     logger(tempstr)
   ENDIF
-  Dispose(packet)
-  Dispose(data2)
-
-  IF debugflag
-    StringF(tempstr,'IN: \s',server_data)
-    logger(tempstr)
-  ENDIF
+  DisposeLink(packet)
+  DisposeLink(data2)
 
   StrCopy(tempstr,message)
   LowerStr(tempstr)
@@ -452,7 +440,7 @@ PROC deliver_mrc(server_data)
       StringF(tempstr,'Latest version is \s',packet[1])
       logger(tempstr)
     ENDIF
-    Dispose(packet)
+    DisposeLink(packet)
 
   -> Manage old clients
   ELSEIF (StrCmp(fromuser,'SERVER')) AND (StrCmp(message,'OLDVERSION:',11))
@@ -464,7 +452,7 @@ PROC deliver_mrc(server_data)
       StringF(tempstr,'Latest version is \s',packet[1])
       logger(tempstr)
     ENDIF
-    Dispose(packet)
+    DisposeLink(packet)
     Raise(ERR_EXCEPT)
   ELSE
 
@@ -479,7 +467,7 @@ PROC deliver_mrc(server_data)
         ENDIF
         Close(f)
         StrCopy(mrcstats,packet[1])
-        Dispose(packet)
+        DisposeLink(packet)
       ELSE
         StringF(tempstr,'Cannot write server stats to \s',statsfile)
         logger(tempstr)
@@ -489,16 +477,12 @@ PROC deliver_mrc(server_data)
     chatlog(server_data)
     FOR i:=0 TO ListLen(clients)-1
       userConn:=clients[i]
-      StringF(tempstr,'sending to client \d from \s to \s',i,fromuser,touser)
-      logger(tempstr)
       IF (StrCmp(touser,'NOTME')=FALSE) OR (StrCmp(fromuser,userConn.userName)=FALSE)
-        StringF(tempstr,'Forwarding message to \s',userConn.userName)
-        logger(tempstr)
         data2:=String(StrLen(server_data)+1)
         StrCopy(data2,server_data)
         IF data2[StrLen(data2)-1]<>'\n' THEN StrAdd(data2,'\n')
         Send(userConn.socket,data2,StrLen(data2),0)
-        Dispose(data2)
+        DisposeLink(data2)
       ENDIF    
     ENDFOR               
   ENDIF
@@ -675,7 +659,7 @@ PROC mainproc(listenSock)
           ENDIF
           i++
         ENDWHILE
-        Dispose(tdat)
+        DisposeLink(tdat)
       ELSE
         restart:=1
       ENDIF
@@ -760,6 +744,8 @@ PROC main() HANDLE
   ENDIF
 
   readConfiguration()
+
+  StrCopy(latency,'???')
   
   IF check_startup()<>FALSE THEN RETURN
   delay:=0
@@ -788,9 +774,10 @@ EXCEPT DO
   FOR i:=0 TO ListLen(clients)-1
     userConn:=clients[i]
     CloseSocket(userConn.socket)
-    Dispose(userConn)
+    END userConn
   ENDFOR
+  DeleteFile('env:mrcstats.dat')
   IF listenSock<>-1 THEN CloseSocket(listenSock)
 	CloseLibrary(socketbase)
-  Dispose(clients)
+  DisposeLink(clients)
 ENDPROC
