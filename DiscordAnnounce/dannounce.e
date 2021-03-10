@@ -303,7 +303,7 @@ ENDPROC
 /* Open and initialize AmiSSL */
 PROC init()
 	DEF is_ok = FALSE
-  DEF tags
+  DEF tags:PTR TO LONG
 
   socketbase:=OpenLibrary('bsdsocket.library', 4)
 	IF (socketbase=NIL)
@@ -332,9 +332,9 @@ PROC init()
     RETURN FALSE
   ENDIF
 
-  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,TAG_DONE]
+  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,TAG_DONE]:LONG
   IF (InitAmiSSLA(tags) <> 0)
-    END tags
+    END tags[5]
 		WriteF('Couldn''t initialize AmiSSL!\n');
     cleanup()
     RETURN FALSE
