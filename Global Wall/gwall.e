@@ -110,7 +110,7 @@ PROC fullTrim(src:PTR TO CHAR)
     IF n>0 THEN v:=tempStr[n-1]
   ENDWHILE
   StrCopy(src,tempStr)
-  Dispose(tempStr)
+  DisposeLink(tempStr)
 ENDPROC
 
 PROC parseConfigFile(configFileName:PTR TO CHAR, configNames:PTR TO stringlist, configValues:PTR TO stringlist)
@@ -261,7 +261,7 @@ PROC main()
 
       IF timeoutError
         transmit('[0mThe server is not currently responding. Please try again later')
-        END fds
+        END fds[32]
         IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
         IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
         RETURN
@@ -367,7 +367,7 @@ PROC main()
       transmit('')
     ENDIF
 
-    END fds
+    END fds[32]
     IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
     IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
 ENDPROC
