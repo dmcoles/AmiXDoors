@@ -5,8 +5,7 @@
 MODULE 'dos/dos','dos/dosasl','dos/datetime','socket','net/netdb','net/in','net/socket','exec/ports','devices/timer','dos/dosextens','exec/io','amigalib/ports','amigalib/io','exec/nodes'
 
 /*
- dl chatlog
- scrollback
+ /who
 */
 
 CONST ERR_EXCEPT=1
@@ -97,7 +96,6 @@ DEF userAlias[255]:STRING
 DEF userIndex=0
 DEF myRoom[255]:STRING
 DEF myTopic[255]:STRING
-DEF userName[100]:STRING
 DEF myNamePrompt[255]:STRING
 DEF mrcVersion[255]:STRING
 DEF mrcStats[255]:STRING
@@ -445,11 +443,9 @@ ENDPROC
 PROC getTime(outTimeStr:PTR TO CHAR)
   DEF d : PTR TO datestamp
   DEF dt : datetime
-  DEF datestr[10]:STRING
-  DEF daystr[10]:STRING
   DEF timestr[10]:STRING
   DEF hours[2]:STRING
-  DEF hr,r,dateVal
+  DEF hr
 
   d:=dt.stamp
   DateStamp(d)
@@ -497,6 +493,7 @@ PROC findPlyr()
       done:=TRUE
       ret:=x
     ENDIF
+    x++
   ENDWHILE
 ENDPROC ret
 
@@ -750,7 +747,7 @@ PROC add2Chat(s:PTR TO CHAR)
   DEF tempCharStr[1]:STRING
   DEF lastColourCode[3]:STRING
   DEF hl[20]:STRING
-  DEF i,c,p
+  DEF i,c,p,spaceI
 
   StrCopy(hl,'|16|00.|16|07')
   
@@ -768,14 +765,19 @@ PROC add2Chat(s:PTR TO CHAR)
   IF plyr.useClock
     getTime(timeStr)
   ENDIF
+  StringF(tempstr,'\s\s',timeStr,hl)
+  FOR i:=0 TO StrLen(timeStr)-1 DO timeStr[i]:=" "
   i:=0
   c:=0
-  StringF(tempstr,'\s\s',timeStr,hl)
   
   StrCopy(tempCharStr,'#')
   StrCopy(lastColourCode,'')
+  spaceI:=-1
   WHILE i<StrLen(s)
     IF s[i]<>"|"
+      IF s[i]=" "
+        spaceI:=i
+      ENDIF
       tempCharStr[0]:=s[i]
       StrAdd(tempstr,tempCharStr)
       c++
@@ -789,9 +791,14 @@ PROC add2Chat(s:PTR TO CHAR)
       i:=i+3
     ENDIF
     IF c=(79-StrLen(timeStr))
+      IF (spaceI<>-1)
+        SetStr(tempstr,StrLen(tempstr)-(i-spaceI))
+        i:=spaceI+1
+      ENDIF
       addChatLine(tempstr)
       StringF(tempstr,'\s\s\s',timeStr,hl,lastColourCode)
       c:=0
+      spaceI:=-1
     ENDIF
   ENDWHILE
   IF c>0 THEN addChatLine(tempstr)
@@ -1308,6 +1315,98 @@ PROC doDebugAction()
   showChat()
 ENDPROC
 
+PROC mainScrollBack(lines:PTR TO LONG)
+  DEF p,p2,key,i,max
+  DEF tempstr[255]:STRING
+  
+  max:=ListLen(lines)-(numLines-3)
+  p:=max
+  REPEAT
+    p2:=p
+    FOR i:=0 TO numLines-5
+      IF p2<0 
+        writeStr('[K',LF)
+      ELSE
+        writeStr('[0m',0)
+        writeStr(lines[p2],0)
+        writeStr('[K',LF)
+      ENDIF
+      p2++
+    ENDFOR
+    sendCommandString(JH_HK,0,tempstr)
+    IF StrLen(tempstr)>0 THEN key:=tempstr[0] ELSE key:=0
+    IF (key=18) THEN p:=p-(numLines-5) ->CTRL R
+    IF (key=3) THEN p:=p+(numLines-5) ->CTRL C
+    IF (key=UPARROW) THEN p:=p-1
+    IF (key=DOWNARROW) THEN p:=p+1
+    IF p<0 THEN p:=0
+    IF p>max THEN p:=max
+    writeStr('[2;1H',0)
+  UNTIL key=27
+ENDPROC
+
+PROC doScrollAction()
+  DEF tempstr[255]:STRING
+  DEF l,m:PTR TO CHAR,fh,loaded,nomem,i,c
+  
+  DEF lines:PTR TO LONG
+  StringF(tempstr,'\c------------------------------- Scrollback Buffer ------------------------------',12)
+  writeStr(tempstr,LF)
+  StringF(tempstr,'[\d;1H--------------------------------------------------------------------------------',numLines-2)
+  writeStr(tempstr,LF)
+  writeStr('   Move ([32mUp[0m/[32mDown[0m)     Page Up ([32mCtrl-R[0m)     Page Down ([32mCtrl-C[0m)     [32mESC [0mto QUIT[0m[2;1H',0)
+  l:=FileLength(chatLog)
+  IF l=0
+    writeStr('No chatlog available.',LF)
+    writeStr('Press any key to return to chat.',LF)
+    sendCommandString(JH_HK,0,tempstr)
+  ELSE
+    nomem:=FALSE
+    m:=New(l)
+    IF m<>NIL
+      loaded:=FALSE
+      fh:=Open(chatLog,MODE_OLDFILE)
+      IF fh<>NIL
+        IF Read(fh,m,l)=l THEN loaded:=TRUE
+        Close(fh)
+      ENDIF
+      
+      IF loaded
+        c:=1
+        FOR i:=0 TO l-1 DO IF m[i]="\n" THEN c++
+        lines:=List(c)
+        IF lines=NIL
+          nomem:=TRUE
+        ELSE
+          listAddItem(lines,m)
+          
+          FOR i:=0 TO l-1
+            IF m[i]="\n"
+              m[i]:=0
+              IF i<l-1 THEN listAddItem(lines,m+i+1)
+            ENDIF
+          ENDFOR
+          mainScrollBack(lines)
+        ENDIF
+      ELSE
+        writeStr('Unable to load chatlog.',LF)
+        writeStr('Press any key to return to chat.',LF)
+        Dispose(m)
+        sendCommandString(JH_HK,0,tempstr)
+      ENDIF
+    ELSE
+      nomem:=TRUE
+    ENDIF
+    IF nomem
+      writeStr('Not enough memory to load chatlog.',LF)
+      writeStr('Press any key to return to chat.',LF)
+      sendCommandString(JH_HK,0,tempstr)
+    ENDIF
+  ENDIF
+  showTitle()
+  showChat()
+ENDPROC
+
 PROC doSetAction(s:PTR TO CHAR)
   DEF tag[255]:STRING
   DEF tempstr[255]:STRING
@@ -1346,11 +1445,11 @@ PROC doSetAction(s:PTR TO CHAR)
   ELSEIF StrCmp(tag,'DEFAULTROOM')
     AstrCopy(plyr.defaultRoom,s,80)
   ELSEIF StrCmp(tag,'NICKCOLOR')
-    changeNick("C",s,FALSE)
+    changeNick("C",s)
   ELSEIF StrCmp(tag,'LTBRACKET')
-    changeNick("L",s,FALSE)
+    changeNick("L",s)
   ELSEIF StrCmp(tag,'RTBRACKET')
-    changeNick("R",s,FALSE)
+    changeNick("R",s)
   ELSEIF StrCmp(tag,'USECLOCK')
     changeClock(1,s)
   ELSEIF StrCmp(tag,'CLOCKFORMAT')
@@ -1439,6 +1538,8 @@ PROC processUserInput(s:PTR TO CHAR)
         doSetAction(s+5)
       ELSEIF StrCmp(tempstr,'/DEBUG',6)
         doDebugAction()
+      ELSEIF StrCmp(tempstr,'/SCROLL',7)
+        doScrollAction()
       ELSEIF StrCmp(tempstr,'/TOPIC ',7)
         changeTopic(s+7)
       ELSEIF StrCmp(tempstr,'/MOTD')
@@ -1559,7 +1660,7 @@ PROC processServerResponse(r:PTR TO CHAR)
 
 ENDPROC
 
-PROC changeNick(lrnc,n:PTR TO CHAR,announce)
+PROC changeNick(lrnc,n:PTR TO CHAR)
   DEF tmp[255]:STRING
   
   SELECT lrnc
@@ -1684,7 +1785,7 @@ PROC init()
   y:=findPlyr()
   IF y = 0 THEN newPlyr() ELSE readPlyr(y)
   
-  changeNick("N",userTag,FALSE)
+  changeNick("N",userTag)
   
 ENDPROC
 
@@ -1722,8 +1823,6 @@ PROC dlChatLog()
   DEF tempChat[255]:STRING
   DEF ds[40]:STRING
   DEF st[255]:STRING
-  DEF x[255]:STRING
-  DEF y[255]:STRING
   DEF tempstr[255]:STRING
   DEF tempstr2[255]:STRING
   DEF fh,fh2
@@ -1783,7 +1882,6 @@ PROC main() HANDLE
 
   DEF addr: PTR TO LONG
   DEF hostEnt: PTR TO hostent
-  DEF p
   DEF sep[2]:STRING
   DEF tdat:PTR TO LONG
   DEF data
@@ -1804,7 +1902,7 @@ PROC main() HANDLE
   
   StrCopy(mrcStats,'')
   
-  StrCopy(userFile,'mrcusers.dat')
+  StrCopy(userFile,'PROGDIR:mrcusers.dat')
 
 	socketbase:=OpenLibrary('bsdsocket.library',2)
   IF socketbase=NIL
@@ -2013,7 +2111,7 @@ PROC main() HANDLE
         userIdx:=1
       ENDIF      
 
-      IF m=17
+      IF (m=17) OR (m=27)
         IF exitChat=FALSE
           leaveChat()
           exitChat:=TRUE
