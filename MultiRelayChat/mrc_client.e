@@ -35,9 +35,12 @@ CONST ERR_EXCEPT=1
 
 CONST EAGAIN=35
 CONST ECONNRESET=54
+CONST ECONNABORTED=53
 CONST FIONBIO=$8004667e
 CONST LISTENQ=100
 CONST CHAR_BACKSPACE=8
+
+CONST DEBUG_FLAG=0
 
 OBJECT userConnection
   userName[255]:ARRAY OF CHAR
@@ -70,6 +73,15 @@ DEF mrcstats[255]:STRING
 DEF latency[3]:STRING
 
 DEF restart=0
+
+PROC setFDS(fds:PTR TO LONG,socketVal)
+  DEF i,n
+  
+  n:=(socketVal/32)
+  IF (n<0) OR (n>=32) THEN Raise(1)
+  
+  fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
+ENDPROC
 
 PROC strip(src:PTR TO CHAR,dest:PTR TO CHAR)
   DEF n,v=0
@@ -104,6 +116,7 @@ PROC openListenSocket(port)
 
 	IF(Bind(server_s, servaddr, SIZEOF sockaddr_in) < 0)
 		WriteF('Error calling bind() for port \d, error=\d\b\n',port,Errno());
+    Shutdown(server_s,2)
     CloseSocket(server_s)
     END servaddr
 		RETURN FALSE,-1
@@ -111,6 +124,7 @@ PROC openListenSocket(port)
 
 	IF(Listen(server_s, LISTENQ) < 0)
 		WriteF('Error calling listen()\b\n')
+    Shutdown(server_s,2)
     CloseSocket(server_s)
     END servaddr
     RETURN FALSE,-1
@@ -126,22 +140,28 @@ PROC clientAccept(socket)
   DEF userConn:PTR TO userConnection
   csock:=Accept(socket,NIL,NIL)
   IF csock=-1 THEN RETURN
-  userConn:=NEW userConn
-  StrCopy(userConn.userName,'')
-  userConn.socket:=csock
-  ListAdd(clients,[userConn])
+  IF ListLen(clients)=ListMax(clients)
+    logger('Max client connections reached. Not accepting connection')   
+  ELSE
+    userConn:=NEW userConn
+    StrCopy(userConn.userName,'')
+    userConn.socket:=csock
+    ListAdd(clients,[userConn])
+  ENDIF
 ENDPROC
 
 PROC removeClient(socket)
   DEF tempList:PTR TO LONG
   DEF userConn:PTR TO userConnection
   DEF i
-  tempList:=List(ListLen(clients)-1)
+  tempList:=List(ListLen(clients))
   FOR i:=0 TO ListLen(clients)-1
     userConn:=clients[i]
     IF userConn.socket<>socket
       ListAdd(tempList,[userConn]) 
     ELSE
+      Shutdown(userConn.socket,2)
+      CloseSocket(userConn.socket)
       END userConn
     ENDIF
   ENDFOR
@@ -177,7 +197,7 @@ PROC readConfiguration()
   StrCopy(info_Sysop,'Unconfigured BBS')
   StrCopy(info_Desc,'Unconfigured BBS')
 
-  f:=Open('mrc_client.cfg',MODE_OLDFILE)
+  f:=Open('PROGDIR:mrc_client.cfg',MODE_OLDFILE)
   IF f>0
     WHILE ReadStr(f,cfgLine)<>-1
       cfgData:=splitBuffer(cfgLine,'=')
@@ -273,7 +293,9 @@ ENDPROC cnt
 PROC logger(loginfo:PTR TO CHAR)
   DEF currDate: datetime
   DEF ltime[255]:STRING
-  DEF tempstr
+  DEF clogfile[255]:STRING
+  DEF tempstr,tempstr2
+  DEF f
 
   DateStamp(currDate.stamp)
   formatLongDate(currDate,ltime)
@@ -281,6 +303,20 @@ PROC logger(loginfo:PTR TO CHAR)
   strip(loginfo,tempstr)
   ->ltime = time.asctime(time.localtime(time.time()))
   WriteF('\s  \s\n',ltime,tempstr)
+
+  IF DEBUG_FLAG
+    StrCopy(clogfile,'mrcchat.dbg')
+    f:=Open(clogfile,MODE_READWRITE)
+    IF f>0
+      Seek(f,0,OFFSET_END)
+      tempstr2:=String(StrLen(ltime)+StrLen(tempstr)+2)
+      StringF(tempstr2,'\s \s\n',ltime,tempstr)
+      Write(f,tempstr2,StrLen(tempstr2))
+      DisposeLink(tempstr2)
+      Close(f)
+    ENDIF
+  ENDIF
+
   DisposeLink(tempstr)
 ENDPROC
 
@@ -331,12 +367,12 @@ PROC send_mrc(userConn:PTR TO userConnection)
   b:=Recv(userConn.socket,readBuffer,8192,0)
   IF b<=0
     e:=Errno()
-    IF (e<>EAGAIN) AND (e<>53)
-      StringF(tempstr,'unexpected=\d',e)
+    IF (e<>EAGAIN) AND (e<>ECONNABORTED) AND (e<>ECONNRESET)
+      StringF(tempstr,'unexpected error reading client connection \d',e)
       logger(tempstr)
       restart:=1
     ENDIF
-    IF (e=ECONNRESET) OR (e=53)
+    IF (e=ECONNRESET) OR (e=ECONNABORTED)
       IF StrLen(userConn.userName)>0
         StringF(tempstr,'\s~~~SERVER~~~LOGOFF~\n',userConn.userName)
         deliver_mrc(tempstr)
@@ -380,7 +416,16 @@ PROC send_mrc(userConn:PTR TO userConnection)
           ELSE
             send_server(data)
           ENDIF
-        ENDIF  
+          IF DEBUG_FLAG 
+            StringF(tempstr,'OUT: \s',data)
+            logger(tempstr)
+          ENDIF
+        ELSE
+          IF DEBUG_FLAG 
+            StringF(tempstr,'invalid packet: \s',data)
+            logger(tempstr)
+          ENDIF
+        ENDIF
       ENDIF
       i++
     ENDWHILE
@@ -424,10 +469,15 @@ PROC deliver_mrc(server_data)
   DisposeLink(packet)
   DisposeLink(data2)
 
+  IF DEBUG_FLAG
+    StringF(tempstr,'IN: \s',server_data)
+    logger(tempstr)
+  ENDIF
+
   StrCopy(tempstr,message)
   LowerStr(tempstr)
-
-  -> Manage server PINGs
+ 
+    -> Manage server PINGs
   IF (StrCmp(fromuser,'SERVER')) AND (StrCmp(tempstr,'ping')) 
     send_im_alive()
   -> Manage update available notifications
@@ -579,10 +629,27 @@ PROC mainproc(listenSock)
 
   DEF addr: PTR TO LONG
   DEF hostEnt: PTR TO hostent
+  DEF fds:PTR TO LONG
+  DEF nfds
+  DEF userConn:PTR TO userConnection
   
   mrcserver:=Socket(AF_INET,SOCK_STREAM,0)
+  IF mrcserver=-1
+    StringF(tempstr,'Unable to create socket')
+    logger(tempstr)
+    RETURN
+  ENDIF
 
-  hostEnt:=GetHostByName(host)
+
+  hostEnt:=GetHostByName(host) 
+  IF hostEnt=0
+    StringF(tempstr,'Unable to connect to \s:\d',host,port)
+    logger(tempstr)
+    Shutdown(mrcserver,2)
+    CloseSocket(mrcserver)
+    RETURN
+  ENDIF
+  
   addr:=hostEnt.h_addr_list[]
   addr:=addr[]
   
@@ -599,6 +666,7 @@ PROC mainproc(listenSock)
   IF (res<>0) OR (Errno()<>0)
     StringF(tempstr,'Unable to connect to \s:\d',host,port)
     logger(tempstr)
+    Shutdown(mrcserver,2)
     CloseSocket(mrcserver)
     RETURN
   ENDIF
@@ -609,8 +677,9 @@ PROC mainproc(listenSock)
   StringF(tempstr,'\s~\s',bbsName,version_string)
   res:=Send(mrcserver,tempstr,StrLen(tempstr),0)
   IF (res=-1)
-    StringF(tempstr,'Unable to connect to \s:\d',host,port)
+    StringF(tempstr,'Unable to send to \s:\d',host,port)
     logger(tempstr)
+    Shutdown(mrcserver,2)
     CloseSocket(mrcserver)
     RETURN
   ENDIF
@@ -625,7 +694,34 @@ PROC mainproc(listenSock)
   -> Non-blocking socket loop to improve speed
   readBuffer:=New(8193)
   WHILE TRUE
-    Delay(10)
+    ->Delay(10)
+
+    IoctlSocket(mrcserver,FIONBIO,[0])
+    IoctlSocket(listenSock,FIONBIO,[0])
+    FOR i:=0 TO ListLen(clients)-1    
+      userConn:=clients[i]
+      IoctlSocket(userConn.socket,FIONBIO,[0])
+    ENDFOR
+
+    fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
+
+    setFDS(fds,mrcserver)
+    setFDS(fds,listenSock)
+    nfds:=Max(mrcserver,listenSock)
+    FOR i:=0 TO ListLen(clients)-1    
+      userConn:=clients[i]
+      setFDS(fds,userConn.socket)
+      nfds:=Max(nfds,userConn.socket)
+    ENDFOR
+    res:=WaitSelect(nfds+1,fds,NIL,NIL,NIL,NIL)
+    END fds[32]
+
+    IoctlSocket(mrcserver,FIONBIO,[1])
+    IoctlSocket(listenSock,FIONBIO,[1])
+    FOR i:=0 TO ListLen(clients)-1    
+      userConn:=clients[i]
+      IoctlSocket(userConn.socket,FIONBIO,[1])
+    ENDFOR
   
     clientAccept(listenSock)
     
@@ -644,6 +740,8 @@ PROC mainproc(listenSock)
         ENDIF
         ->continue
       ELSE
+        StringF(tempstr,'unexpected error reading server connection \d',e)
+        logger(tempstr)
         restart:=1
       ENDIF
     ELSE
@@ -773,6 +871,7 @@ EXCEPT DO
   CloseSocket(mrcserver)
   FOR i:=0 TO ListLen(clients)-1
     userConn:=clients[i]
+    Shutdown(userConn.socket,2)
     CloseSocket(userConn.socket)
     END userConn
   ENDFOR

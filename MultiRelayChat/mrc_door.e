@@ -3,7 +3,7 @@
   OPT LARGE
 
 MODULE 'dos/dos','dos/dosasl','dos/datetime','socket','net/netdb','net/in','net/socket','exec/ports','devices/timer','dos/dosextens','exec/io','amigalib/ports','amigalib/io','exec/nodes'
-
+MODULE 'AEDoor'                 /* Include libcalls & constants */
 /*
  /who
 */
@@ -22,41 +22,9 @@ CONST DOWNARROW=5
 
 CONST MAX_BUFFER=140    -> Max input buffer limit [sf]
 
-CONST LF=1
-CONST JH_REGISTER=1
-CONST JH_SHUTDOWN=2
-CONST JH_WRITE=3
-CONST JH_HK=6
-CONST JH_BBSNAME=11
-CONST JH_ExtHK=15
-CONST JH_SIGBIT=16
-CONST DT_NAME=100
-CONST DT_SLOTNUMBER=104
-CONST DT_LINELENGTH=122
-CONST DT_TIMEOUT=125
-CONST ZMODEMSEND=137
-CONST GETKEY=500
-CONST BB_GETTASK=512
-
 OBJECT ansi
   ansicode: INT
   buf[80]: ARRAY OF CHAR
-ENDOBJECT
-
-OBJECT jhMessage
-  msg: mn
-  string[200]: ARRAY OF CHAR
-  data: LONG   -> SAID INT
-  command: LONG -> SAID INT
-  nodeID: LONG -> SAID INT
-  lineNum: LONG -> SAID INT
-  signal: LONG
-  task: PTR TO process
-  semi: LONG
-  filler1: LONG
-  filler2: LONG
-  strptr: PTR TO CHAR
-  filler3:LONG
 ENDOBJECT
 
 OBJECT userRec
@@ -83,9 +51,8 @@ OBJECT userRec
   clockFormat:LONG
 ENDOBJECT
 
-DEF doorPort:PTR TO mp
-DEF replyPort:PTR TO mp
-DEF comm=FALSE
+DEF diface=0,strfield:LONG
+DEF node
 
 DEF plyr=NIL:PTR TO userRec
 
@@ -111,7 +78,7 @@ DEF currCount=0
 DEF exitChat=FALSE
 DEF chatLog[255]:STRING
 
-DEF keycount=0
+->DEF keycount=0
 
 DEF inputColour=15
 DEF numLines=29
@@ -128,233 +95,21 @@ DEF scrollDly=0
 
 DEF scrollSpeed=15
 
-DEF node=0
-
 DEF userIdx=1    -> Index of UserList search [sf]
 DEF lastUSearch[255]:STRING -> Last user search string [sf]
 
 DEF ansi:ansi
 
-DEF timerport=NIL: PTR TO mp
-DEF timermsg=NIL: PTR TO timerequest
-DEF timerQueued=FALSE
-
-
-PROC setTimer(timevalSecs,timevalMicro)
-  timermsg.io.command:=TR_ADDREQUEST /* add a new timer request */
-  timermsg.time.secs:=timevalSecs          /* seconds */
-  timermsg.time.micro:=timevalMicro        /* microseconds */
-  timermsg.io.mn.replyport:=timerport
-  timerQueued:=TRUE
-  SendIO(timermsg)     /* post the request to the timer device */
-ENDPROC
-
-PROC waitTime()
-  DEF res
-  IF timerQueued
-    timerQueued:=FALSE
-    res:=WaitIO(timermsg)
-  ELSE
-    res:=0
-  ENDIF
-ENDPROC res
-
-PROC stopTime()
-  IF timerQueued
-    IF(CheckIO(timermsg))=FALSE THEN AbortIO(timermsg)
-    WaitIO(timermsg)
-    timerQueued:=FALSE
-  ENDIF
-ENDPROC
-
-PROC openTimer()
-  DEF error
-
-  IF(timerport:=createPort(0,0))=NIL THEN RETURN TRUE
-
-  IF(timermsg:=(createExtIO(timerport,SIZEOF timerequest)))=FALSE THEN RETURN TRUE
-
-  timermsg.io.mn.replyport:=timerport
-  IF(error:=OpenDevice('timer.device',UNIT_VBLANK,timermsg,0)) THEN RETURN error
-ENDPROC FALSE
-
-PROC closeTimer()
-  IF(timermsg)
-    stopTime()
-    CloseDevice(timermsg)
-    deleteExtIO(timermsg)
-    timermsg:=NIL
-    IF(timerport) THEN deletePort(timerport)
-    timerport:=NIL
-  ENDIF
-ENDPROC
-
-PROC sendMsg(doorMsg:PTR TO jhMessage,task=0,sigbit=0)
-  DEF signals
-  doorMsg.msg.ln.type:=NT_MESSAGE
-  doorMsg.msg.length:=SIZEOF jhMessage
-  doorMsg.msg.replyport:=replyPort
-
-  ->WHILE GetMsg(replyPort)
-  ->ENDWHILE
-  PutMsg(doorPort,doorMsg)
-  ->IF (GetMsg(replyPort)) THEN RETURN
-  IF task=0
-    WaitPort(replyPort)
-  ELSE
-    signals:=Shl(1,timerport.sigbit) OR Shl(1,replyPort.sigbit)
-    signals:=Wait(signals)
-    IF ((signals AND Shl(1,replyPort.sigbit))=0)
-      Signal(task,Shl(1,sigbit))
-      WaitPort(replyPort)
-    ENDIF
-  ENDIF
-  GetMsg(replyPort)
-ENDPROC 
-
-PROC sendCommand(cmdCode)
-  DEF doorMsg:PTR TO jhMessage
-
-  IF doorPort=0 THEN RETURN FALSE
-  doorMsg:=NEW doorMsg
-
-  doorMsg.command:=cmdCode
-  sendMsg(doorMsg)
-  END doorMsg
-ENDPROC TRUE
-
-PROC sendDataCommand(cmdCode,data)
-  DEF doorMsg:PTR TO jhMessage
-
-  IF doorPort=0 THEN RETURN FALSE
-
-  doorMsg:=NEW doorMsg
-  doorMsg.command:=cmdCode
-  doorMsg.data:=data
-  sendMsg(doorMsg)
-  END doorMsg
-ENDPROC TRUE
-
-PROC writeStr(strIn:PTR TO CHAR,lfFlag)
-  DEF doorMsg:PTR TO jhMessage
-
-  IF doorPort=0 THEN RETURN FALSE
-  doorMsg:=NEW doorMsg
-  doorMsg.command:=JH_WRITE
-  WHILE StrLen(strIn)>199
-    AstrCopy(doorMsg.string,strIn,200)
-    sendMsg(doorMsg)
-    strIn:=strIn+200
-  ENDWHILE
-  AstrCopy(doorMsg.string,strIn,200)
-  sendMsg(doorMsg)
-  
-  IF lfFlag
-    AstrCopy(doorMsg.string,'\b\n')
-    sendMsg(doorMsg)
-  ENDIF
-  END doorMsg
-ENDPROC TRUE
-
-PROC sendStrCommand(cmdCode,data,strIn:PTR TO CHAR)
-  DEF doorMsg:PTR TO jhMessage
-
-  IF doorPort=0 THEN RETURN FALSE
-  doorMsg:=NEW doorMsg
-  doorMsg.command:=cmdCode
-  doorMsg.data:=data
-  AstrCopy(doorMsg.string,strIn,200)
-  sendMsg(doorMsg)
-  END doorMsg
-ENDPROC TRUE
-
-PROC doExtHK()
-  DEF doorMsg:PTR TO jhMessage
-  DEF res,sigbit,task
-
-  IF doorPort=0 THEN RETURN FALSE
-  doorMsg:=NEW doorMsg
-  doorMsg.command:=JH_SIGBIT
-  doorMsg.data:=0
-  sendMsg(doorMsg)
-  sigbit:=doorMsg.data
-
-  doorMsg.command:=BB_GETTASK
-  doorMsg.data:=0
-  sendMsg(doorMsg)
-  task:=doorMsg.task
-
-  doorMsg.command:=JH_ExtHK
-  doorMsg.signal:=sigbit
-  doorMsg.data:=0
-  sendMsg(doorMsg,task,sigbit)
-  res:=doorMsg.command
-  IF res=-3 THEN res:=0
-  END doorMsg
-ENDPROC res
-
-PROC sendCommandString(cmdCode,data,outStr:PTR TO CHAR)
-  DEF doorMsg:PTR TO jhMessage
-
-  IF doorPort=0 THEN RETURN FALSE
-  doorMsg:=NEW doorMsg
-  doorMsg.command:=cmdCode
-  doorMsg.data:=data
-  sendMsg(doorMsg)
-  StrCopy(outStr,doorMsg.string,200)
-  END doorMsg
-ENDPROC TRUE
-
-PROC createComm(node)
-  DEF doorPortName[20]:STRING
-  StringF(doorPortName,'\s\d','AEDoorPort',node)
-  IF (doorPort:=FindPort(doorPortName))=FALSE THEN RETURN FALSE
-  IF (replyPort:=createPort(0,0))=FALSE THEN RETURN FALSE
-  sendCommand(JH_REGISTER)  
-ENDPROC TRUE
-
-PROC deleteComm()
-  IF (doorPort<>0) AND (replyPort<>0)
-    sendCommand(JH_SHUTDOWN)  
-  ENDIF
-  IF replyPort<>0
-    deletePort(replyPort)
-    replyPort:=0
-  ENDIF
-ENDPROC
-
 PROC fetchKey()
   DEF res
-  DEF tempstr[255]:STRING
 
-  keycount++
-  IF Mod(keycount,500)<>0
-    sendCommandString(GETKEY,0,tempstr)
-    IF StrCmp(tempstr,'1')
-      sendCommandString(JH_HK,0,tempstr)
-      IF StrLen(tempstr)>0 THEN res:=tempstr[0] ELSE res:=0
-      sendDataCommand(705,1) ->console cursor on
-      RETURN res
-    ENDIF
-    RETURN 0
+  SendCmd(diface,GETKEY)
+  IF StrCmp(strfield,'1')
+    res:=HotKey(diface,'')
+    SendDataCmd(diface,705,1) ->console cursor on
+    RETURN res
   ENDIF
-  keycount:=1
-
-  sendStrCommand(DT_TIMEOUT,0,'0')
-
-  openTimer()
-  setTimer(0,1000)
-  
-  res:=doExtHK()
-  
-  IF (res<>0)
-    stopTime()
-  ELSE
-    waitTime()
-  ENDIF
-  closeTimer()
-  sendDataCommand(705,1) ->console cursor on
-ENDPROC res
+ENDPROC 0
 
 PROC listAddItem(list:PTR TO LONG, item)
   DEF n
@@ -406,8 +161,6 @@ PROC strCmpi(test1: PTR TO CHAR, test2: PTR TO CHAR, len=ALL)
     IF charToLower(test1[i])<>charToLower(test2[i]) THEN RETURN FALSE
   ENDFOR
 ENDPROC TRUE
-
-
 
 PROC replaceStr(source:PTR TO CHAR, search:PTR TO CHAR, replace:PTR TO CHAR)
   DEF workStr[255]:STRING
@@ -652,11 +405,11 @@ ENDPROC
 PROC showTitle()
   DEF tempstr[255]:STRING
   StringF(tempstr,'\c',12)
-  writeStr(tempstr,0)
-  writeStr('[0m.------------------------------- [34mMu[36mlti [0mRela[36my Ch[34mat [0m-----------------------------.',0)
+  WriteStr(diface,tempstr,0)
+  WriteStr(diface,'[0m.------------------------------- [34mMu[36mlti [0mRela[36my Ch[34mat [0m-----------------------------.',0)
   updateHeader()
-  writeStr('[3;1H[0m|[70C/? H[36me[36mlp [0m|\b\n',0)
-  writeStr('[4;1H[0m`------------------------------------------------------------------------------''',0)
+  WriteStr(diface,'[3;1H[0m|[70C/? H[36me[36mlp [0m|\b\n',0)
+  WriteStr(diface,'[4;1H[0m`------------------------------------------------------------------------------''',0)
   updateFooter()
 ENDPROC
 
@@ -666,7 +419,7 @@ PROC restoreCursor()
   stripMCI(tempstr)
 
   StringF(tempstr,'[\d;\dH',ListLen(chatLines)+6,Min(79,cursorPos+1+StrLen(tempstr)))
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
 ENDPROC
 
 PROC updateHeartbeat(anim)
@@ -676,15 +429,15 @@ PROC updateHeartbeat(anim)
   ELSE
     StringF(tempstr,'[0m[\d;77H ',ListLen(chatLines)+5)
   ENDIF
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
 ENDPROC
 
 PROC updateHeader()
   DEF tempstr[255]:STRING
   StringF(tempstr,'[2;1H[0m| R[36moom  [33m>[0m>> [K[67C|[68D#\s',myRoom)
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
   StringF(tempstr,'[3;1H[0m| T[36mopic [33m>[0m>> [K[59C/? H[36me[36mlp [0m|[68D\s',myTopic)
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
   
 ENDPROC
 
@@ -692,7 +445,7 @@ PROC updateFooter()
   DEF tempstr[255]:STRING
   updateMaxBuffersize()
   StringF(tempstr,'[\d;1H[0m--[Latency-\r\z\d[3]ms]-[Chatters-\r\z\d[2]]---------------------[Buffer-\r\z\d[3]/\r\z\d[3]]-[[36mM[34mR[36mC[0m]-[ ]--',ListLen(chatLines)+5,latencyVal,currCount,StrLen(inputStr),iMaxBuffer)
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
 ENDPROC
 
 
@@ -725,7 +478,7 @@ PROC displayCurrentInput()
   ypos:=ListLen(chatLines)+6
   StringF(tempstr,'[\d;1H[K[0m\s|\r\z\d[2]\s[\d;\dH',ypos,myNamePrompt,inputColour,tempInput,ListLen(chatLines)+6,Min(79,cursorPos+1+plen))
   pipeToAnsi(tempstr)
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
 ENDPROC
 
 PROC showChat()
@@ -734,7 +487,7 @@ PROC showChat()
   
   FOR i:=0 TO ListLen(chatLines)-1
     StringF(tempstr,'[\d;1H[0m[K\s',i+5,chatLines[i])
-    writeStr(tempstr,0)
+    WriteStr(diface,tempstr,0)
   ENDFOR
  
   displayCurrentInput()
@@ -1128,28 +881,28 @@ ENDPROC
 PROC doHelp()
   DEF tempstr[255]:STRING
   StringF(tempstr,'\c[0;44m \l\s[67][0m',12,'MULTI RELAY CHAT COMMANDS')
-  writeStr(tempstr,LF)
-  writeStr('.------------------------------------------------------------------.',LF)
-  writeStr('| /B <text>                   Broadcast message to all channels    |',LF)
-  writeStr('| /CLS                        Clears window and scrollback text    |',LF)
-  writeStr('| /MSG or /M <user> <text>    Sends a private message              |',LF)
-  writeStr('| /TELL or /T <user> <text>   Sends a private message              |',LF)
-  writeStr('| /TOPIC <text>               Set the TOPIC of the current channel |',LF)
-  writeStr('| /WHO                        List all users on current BBS system |',LF)
-  writeStr('| /ME <text>                  Perform an action                    |',LF)
-  writeStr('| /JOIN <channel>             Join a new channel [name]            |',LF)
-  writeStr('| /SCROLL                     Enter scrollback mode                |',LF)
-  writeStr('| /Q or /QUIT                 Leave/Quit Multi Relay Chat          |',LF)
-  writeStr('|------------------------------------------------------------------|',LF)
-  writeStr('| /WHOON      List all users bbs   /ROOMS       List all rooms     |',LF)
-  writeStr('| /BBSES      List all BBS''s       /USERS       List all users     |',LF)
-  writeStr('| /CHANNEL    List channel users   /INFO        Show info on BBS   |',LF)
-  writeStr('| /CHATTERS   List all users room  /DLCHATLOG   Download chat log  |',LF)
-  writeStr('| /CHANGES    List of changes      /HELP        Show server help   |',LF)
-  writeStr('| /VERSION    Check client and server versions                     |',LF)
-  writeStr('| /SET        Set various fields to your account (/SET HELP)       |',LF)
-  writeStr('`------------------------------------------------------------------''',LF)
-  sendCommandString(JH_HK,0,tempstr)
+  WriteStr(diface,tempstr,LF)
+  WriteStr(diface,'.------------------------------------------------------------------.',LF)
+  WriteStr(diface,'| /B <text>                   Broadcast message to all channels    |',LF)
+  WriteStr(diface,'| /CLS                        Clears window and scrollback text    |',LF)
+  WriteStr(diface,'| /MSG or /M <user> <text>    Sends a private message              |',LF)
+  WriteStr(diface,'| /TELL or /T <user> <text>   Sends a private message              |',LF)
+  WriteStr(diface,'| /TOPIC <text>               Set the TOPIC of the current channel |',LF)
+  WriteStr(diface,'| /WHO                        List all users on current BBS system |',LF)
+  WriteStr(diface,'| /ME <text>                  Perform an action                    |',LF)
+  WriteStr(diface,'| /JOIN <channel>             Join a new channel [name]            |',LF)
+  WriteStr(diface,'| /SCROLL                     Enter scrollback mode                |',LF)
+  WriteStr(diface,'| /Q or /QUIT                 Leave/Quit Multi Relay Chat          |',LF)
+  WriteStr(diface,'|------------------------------------------------------------------|',LF)
+  WriteStr(diface,'| /WHOON      List all users bbs   /ROOMS       List all rooms     |',LF)
+  WriteStr(diface,'| /BBSES      List all BBS''s       /USERS       List all users     |',LF)
+  WriteStr(diface,'| /CHANNEL    List channel users   /INFO        Show info on BBS   |',LF)
+  WriteStr(diface,'| /CHATTERS   List all users room  /DLCHATLOG   Download chat log  |',LF)
+  WriteStr(diface,'| /CHANGES    List of changes      /HELP        Show server help   |',LF)
+  WriteStr(diface,'| /VERSION    Check client and server versions                     |',LF)
+  WriteStr(diface,'| /SET        Set various fields to your account (/SET HELP)       |',LF)
+  WriteStr(diface,'`------------------------------------------------------------------''',LF)
+  HotKey(diface,'')
   showTitle()
   showChat()
 ENDPROC
@@ -1317,7 +1070,6 @@ ENDPROC
 
 PROC mainScrollBack(lines:PTR TO LONG)
   DEF p,p2,key,i,max
-  DEF tempstr[255]:STRING
   
   max:=ListLen(lines)-(numLines-3)
   p:=max
@@ -1325,24 +1077,23 @@ PROC mainScrollBack(lines:PTR TO LONG)
     p2:=p
     FOR i:=0 TO numLines-5
       IF p2<0 
-        writeStr('[K',LF)
+        WriteStr(diface,'[K',LF)
       ELSE
-        writeStr('[0m',0)
-        writeStr(lines[p2],0)
-        writeStr('[K',LF)
+        WriteStr(diface,'[0m',0)
+        WriteStr(diface,lines[p2],0)
+        WriteStr(diface,'[K',LF)
       ENDIF
       p2++
     ENDFOR
-    sendCommandString(JH_HK,0,tempstr)
-    IF StrLen(tempstr)>0 THEN key:=tempstr[0] ELSE key:=0
+    key:=HotKey(diface,'')
     IF (key=18) THEN p:=p-(numLines-5) ->CTRL R
     IF (key=3) THEN p:=p+(numLines-5) ->CTRL C
     IF (key=UPARROW) THEN p:=p-1
     IF (key=DOWNARROW) THEN p:=p+1
     IF p<0 THEN p:=0
     IF p>max THEN p:=max
-    writeStr('[2;1H',0)
-  UNTIL key=27
+    WriteStr(diface,'[2;1H',0)
+  UNTIL (key=27) OR (key="Q") OR ((key AND $FF)>250)
 ENDPROC
 
 PROC doScrollAction()
@@ -1350,16 +1101,16 @@ PROC doScrollAction()
   DEF l,m:PTR TO CHAR,fh,loaded,nomem,i,c
   
   DEF lines:PTR TO LONG
-  StringF(tempstr,'\c------------------------------- Scrollback Buffer ------------------------------',12)
-  writeStr(tempstr,LF)
+  StringF(tempstr,'\c[0m------------------------------- [32mScrollback Buffer[0m ------------------------------',12)
+  WriteStr(diface,tempstr,LF)
   StringF(tempstr,'[\d;1H--------------------------------------------------------------------------------',numLines-2)
-  writeStr(tempstr,LF)
-  writeStr('   Move ([32mUp[0m/[32mDown[0m)     Page Up ([32mCtrl-R[0m)     Page Down ([32mCtrl-C[0m)     [32mESC [0mto QUIT[0m[2;1H',0)
+  WriteStr(diface,tempstr,LF)
+  WriteStr(diface,'   Move ([32mUp[0m/[32mDown[0m)     Page Up ([32mCtrl-R[0m)     Page Down ([32mCtrl-C[0m)     [32mESC [0mto QUIT[0m[2;1H',0)
   l:=FileLength(chatLog)
   IF l=0
-    writeStr('No chatlog available.',LF)
-    writeStr('Press any key to return to chat.',LF)
-    sendCommandString(JH_HK,0,tempstr)
+    WriteStr(diface,'No chatlog available.',LF)
+    WriteStr(diface,'Press any key to return to chat.',LF)
+    HotKey(diface,'')
   ELSE
     nomem:=FALSE
     m:=New(l)
@@ -1389,18 +1140,18 @@ PROC doScrollAction()
           mainScrollBack(lines)
         ENDIF
       ELSE
-        writeStr('Unable to load chatlog.',LF)
-        writeStr('Press any key to return to chat.',LF)
+        WriteStr(diface,'Unable to load chatlog.',LF)
+        WriteStr(diface,'Press any key to return to chat.',LF)
         Dispose(m)
-        sendCommandString(JH_HK,0,tempstr)
+        HotKey(diface,'')
       ENDIF
     ELSE
       nomem:=TRUE
     ENDIF
     IF nomem
-      writeStr('Not enough memory to load chatlog.',LF)
-      writeStr('Press any key to return to chat.',LF)
-      sendCommandString(JH_HK,0,tempstr)
+      WriteStr(diface,'Not enough memory to load chatlog.',LF)
+      WriteStr(diface,'Press any key to return to chat.',LF)
+      HotKey(diface,'')
     ENDIF
   ENDIF
   showTitle()
@@ -1752,7 +1503,7 @@ PROC scrollBanner()
   
   ->StringF(ban,'[2;43H[0m\s[1][36m\l\s[34][0m\s[1]',bs+bannerOff,bs+bannerOff+1,bs+bannerOff+35)
   StringF(ban,'[2;43H[36m\l\s[36]',bs+bannerOff)
-  writeStr(ban,0)
+  WriteStr(diface,ban,0)
   
   IF scrollWait<scrollDly
     scrollWait++
@@ -1773,10 +1524,10 @@ PROC init()
    IF strCmpi(userTag,'SERVER') OR strCmpi(userTag,'CLIENT') OR strCmpi(userTag,'NOTME')
     StrCopy(tempstr,'|16|12|CL|CRUnfortunately, your User Alias is a reserved word and therefore cannot be used.')
     pipeToAnsi(tempstr)
-    writeStr(tempstr,LF)
+    WriteStr(diface,tempstr,LF)
     StrCopy(tempstr,'|12Please ask your SysOp to change your User Alias to use MRC.')
     pipeToAnsi(tempstr)
-    writeStr(tempstr,LF)
+    WriteStr(diface,tempstr,LF)
     Raise(ERR_EXCEPT)
   ENDIF
 
@@ -1836,11 +1587,10 @@ PROC dlChatLog()
   replaceStr(st,' ','_')
   StringF(tempChat,'PROGDIR:mrc_chat_\d_\s_\s.log',node,st,ds)
   StringF(tempstr,'\c[0;36m Strip colour codes? ',12)
-  writeStr(tempstr,0)
+  WriteStr(diface,tempstr,0)
 
   REPEAT
-    sendCommandString(JH_HK,0,tempstr)
-    IF StrLen(tempstr)>0 THEN key:=tempstr[0] ELSE key:=0
+    key:=HotKey(diface,'')
   UNTIL (key=-1) OR (key="y") OR (key="Y") OR (key="N") OR (key="n")
 
   IF key<>-1
@@ -1864,7 +1614,7 @@ PROC dlChatLog()
 
     IF FileLength(tempChat)>=0
       ->download file tempchat
-      sendStrCommand(ZMODEMSEND,0,tempChat)
+      SendStrCmd(ZMODEMSEND,0,tempChat)
     ENDIF
   ENDIF
 
@@ -1906,36 +1656,45 @@ PROC main() HANDLE
 
 	socketbase:=OpenLibrary('bsdsocket.library',2)
   IF socketbase=NIL
-    writeStr('Unable to open bsdsocket.library',LF)
+    WriteStr(diface,'Unable to open bsdsocket.library',LF)
     RETURN
   ENDIF
 
   node:=Val(arg)
-  comm:=createComm(node)
-  IF comm=FALSE THEN Raise(ERR_EXCEPT)
-  
+  IF aedoorbase:=OpenLibrary('AEDoor.library',1)
+    diface:=CreateComm(arg[])     /* Establish Link   */
+    IF diface<>0
+      strfield:=GetString(diface)  /* Get a pointer to the JHM_String field. Only need to do this once */
+    ENDIF
+  ELSE
+    Raise(ERR_EXCEPT)
+  ENDIF
+ 
   StringF(chatLog,'PROGDIR:mrcchat\d.log',node)
+  DeleteFile(chatLog)
 
-  sendCommandString(DT_NAME,1,userAlias)
+  GetDT(diface,DT_NAME,0)        /* no string input here, so use 0 as last parameter */
+  stripAnsi(strfield,userAlias,0,0)
 
   StrCopy(userTag,userAlias)
   replaceStr(userTag,'~','')
   replaceStr(userTag,' ','_')
   stripMCI(userTag)
 
-  sendCommandString(DT_SLOTNUMBER,1,tempstr)
-  userIndex:=Val(tempstr)
+  GetDT(diface,DT_SLOTNUMBER,0)        /* no string input here, so use 0 as last parameter */
+  userIndex:=Val(strfield)
 
-  sendCommandString(DT_LINELENGTH,1,tempstr)
-  numLines:=Val(tempstr)
+  GetDT(diface,DT_LINELENGTH,0)        /* no string input here, so use 0 as last parameter */
+  numLines:=Val(strfield)
 
-  sendCommandString(JH_BBSNAME,1,siteTag)
+  GetDT(diface,JH_BBSNAME,0)        /* no string input here, so use 0 as last parameter */
 
+  stripAnsi(strfield,siteTag,0,0)
   replaceStr(siteTag,'~','')
   replaceStr(siteTag,' ','_')
   stripMCI(siteTag)
 
-  sendDataCommand(501,0)
+  SendDataCmd(diface,501,0)
 
   plyr:=NEW plyr
 
@@ -1976,7 +1735,7 @@ PROC main() HANDLE
   
   IF (res<>0) OR (Errno()<>0)
     StringF(tempstr,'Unable to connect to mrc proxy')
-    writeStr(tempstr,LF)
+    WriteStr(diface,tempstr,LF)
     Raise(ERR_EXCEPT)
   ENDIF
   
@@ -1993,20 +1752,20 @@ PROC main() HANDLE
   readBuffer:=New(8193)
   loop:=0
 
-  sendDataCommand(705,1)  
+  SendDataCmd(diface,705,1)  
   REPEAT
     loop++
 
     Delay(1)
     IF Mod(loop,scrollSpeed)=0
-      sendDataCommand(705,0)   ->console cursor off
+      SendDataCmd(diface,705,0)   ->console cursor off
       curoff:=TRUE
       scrollBanner()
     ENDIF
 
     IF Mod(loop,26)=0
       IF curoff=FALSE 
-        sendDataCommand(705,0) ->console cursor off
+        SendDataCmd(diface,705,0) ->console cursor off
         curoff:=TRUE
       ENDIF
       
@@ -2016,7 +1775,7 @@ PROC main() HANDLE
 
     IF curoff
       restoreCursor()
-      sendDataCommand(705,1) ->console cursor on
+      SendDataCmd(diface,705,1) ->console cursor on
       curoff:=FALSE
     ENDIF
     
@@ -2042,7 +1801,7 @@ PROC main() HANDLE
       e:=Errno()
       IF e<>EAGAIN
         StringF(tempstr,'socket error \d',e)
-        writeStr(tempstr,LF)
+        WriteStr(diface,tempstr,LF)
         Raise(ERR_EXCEPT)
       ENDIF
     ELSE
@@ -2111,13 +1870,14 @@ PROC main() HANDLE
         userIdx:=1
       ENDIF      
 
-      IF (m=17) OR (m=27)
+      IF (m=17)
         IF exitChat=FALSE
           leaveChat()
           exitChat:=TRUE
         ENDIF
       ELSEIF m=27
         StrCopy(inputStr,'')
+        cursorPos:=0
         updateFooter()        
         displayCurrentInput()    
       ELSEIF (m=LEFTARROW) AND (cursorPos>0)
@@ -2188,7 +1948,7 @@ PROC main() HANDLE
       ENDIF
     ENDIF
     
-    IF m<0 THEN exitChat:=TRUE
+    IF ((m AND $FF)>250) THEN exitChat:=TRUE
   UNTIL exitChat
  
 EXCEPT DO
@@ -2215,7 +1975,8 @@ EXCEPT DO
   IF readBuffer THEN Dispose(readBuffer)
   IF mrcserver<>-1 THEN CloseSocket(mrcserver)
   IF socketbase<>NIL THEN CloseLibrary(socketbase)
-  IF comm THEN deleteComm()
   IF plyr<>NIL THEN END plyr
+  IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
+  IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
 ENDPROC
 
