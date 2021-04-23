@@ -79,7 +79,7 @@ PROC main()
   IF EstrLen(hostName)>0
     StringF(fname,'ENV:NODE\dHOST',node)
     fh1:=Open(fname,MODE_NEWFILE)
-    Write(fh1,ipAddr,StrLen(ipAddr))
+    Write(fh1,hostName,StrLen(hostName))
     Close(fh1)
   ENDIF
 
@@ -118,11 +118,12 @@ PROC main()
     
     /* Read ip address of user if nodexip file is present */
     IF (fh3>=0)
-      ReadStr(fh3,tempStr)
-      StringF(ipAddr,' \s ',tempStr)
+      ReadStr(fh3,ipAddr)
       Close(fh3)
-    ELSE
-      StrCopy(ipAddr,'  NOT AVAILABLE  ')
+    ENDIF
+    
+    IF EstrLen(ipAddr)=0
+      StrCopy(ipAddr,'NOT AVAILABLE')
     ENDIF
         
     /* Node is awaiting connect */
@@ -173,7 +174,7 @@ PROC main()
 
   transmit('    [34m `-----·-----------------·-----------------------·------------------''')
 
-  IF (EstrLen(ipAddr)>0)
+  IF (EstrLen(hostName)>0)
     StringF(tempStr,' [34m    | [32mLogin Established from Host :  [37m\l\s[26]        [34m|',hostName)
     transmit(tempStr)
   ELSE
