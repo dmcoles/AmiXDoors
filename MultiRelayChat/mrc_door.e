@@ -1585,7 +1585,7 @@ PROC dlChatLog()
   replaceStr(ds,' ','_')
   StrCopy(st,siteTag)
   replaceStr(st,' ','_')
-  StringF(tempChat,'PROGDIR:mrc_chat_\d_\s_\s.log',node,st,ds)
+  StringF(tempChat,'T:mrc_chat_\d_\s_\s.log',node,st,ds)
   StringF(tempstr,'\c[0;36m Strip colour codes? ',12)
   WriteStr(diface,tempstr,0)
 
@@ -1594,27 +1594,25 @@ PROC dlChatLog()
   UNTIL (key=-1) OR (key="y") OR (key="Y") OR (key="N") OR (key="n")
 
   IF key<>-1
-    
-    IF (key="Y") OR (key="y")
-      fh:=Open(chatLog,MODE_OLDFILE)
-      fh2:=Open(tempChat,MODE_NEWFILE)
-      IF (fh<>0) AND (fh2<>0)
-        WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
-          stripAnsi(tempstr,tempstr2,0,0)
+    fh:=Open(chatLog,MODE_OLDFILE)
+    fh2:=Open(tempChat,MODE_NEWFILE)
+    IF (fh<>0) AND (fh2<>0)
+      WHILE(ReadStr(fh,tempstr)<>-1) OR (StrLen(tempstr)>0)
+        IF (key="Y") OR (key="y")
+          stripAnsi(tempstr,tempstr2,0,0)          
           Fputs(fh2,tempstr2)
-        ENDWHILE
-      ENDIF
-      IF fh<>0 THEN Close(fh)
-      IF fh2<>0 THEN Close(fh2)
-      
-    ELSE
-      StringF(tempstr,'COPY \s \s',chatLog,tempChat)
-      Execute(tempstr,0,0)
+        ELSE
+          Fputs(fh2,tempstr)
+        ENDIF
+      ENDWHILE
     ENDIF
-
+    IF fh<>0 THEN Close(fh)
+    IF fh2<>0 THEN Close(fh2)
     IF FileLength(tempChat)>=0
       ->download file tempchat
-      SendStrCmd(ZMODEMSEND,0,tempChat)
+      SendStrCmd(diface,ZMODEMSEND,tempChat)
+      WriteStr(diface,'Press any key to return to chat.',LF)
+      HotKey(diface,'')
     ENDIF
   ENDIF
 
