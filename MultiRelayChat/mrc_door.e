@@ -1643,6 +1643,7 @@ PROC main() HANDLE
   DEF sLoop=0
   DEF uHandle[255]:STRING
   DEF curoff=FALSE
+  DEF p,invalid,major,minor
 
   ansi.ansicode:=0
 
@@ -1670,6 +1671,24 @@ PROC main() HANDLE
  
   StringF(chatLog,'PROGDIR:mrcchat\d.log',node)
   DeleteFile(chatLog)
+
+  GetDT(diface,EXPRESS_VERSION,0)
+  StrCopy(tempstr,strfield)
+  invalid:=TRUE
+  IF (p:=InStr(tempstr,'.'))>=0
+    tempstr[p]:=' '
+    major:=Val(tempstr+1)
+    minor:=Val(tempstr+p+1)
+    IF ((major>5) OR ((major=5) AND (minor>3)))
+      invalid:=FALSE
+    ENDIF
+  ENDIF
+  
+  IF invalid
+    WriteStr(diface,'this door requires /X 5.4.0 or higher to function',LF)
+    Raise(ERR_EXCEPT)
+  ENDIF
+
 
   GetDT(diface,DT_NAME,0)        /* no string input here, so use 0 as last parameter */
   stripAnsi(strfield,userAlias,0,0)
