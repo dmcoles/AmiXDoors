@@ -121,7 +121,7 @@ PROC main() HANDLE
   DEF token[255]:STRING
   DEF userid=0
   DEF rows=0
-  DEF p,i
+  DEF p,i,invalid,major,minor
   DEF configNames:PTR TO stringlist
   DEF configValues:PTR TO stringlist
   DEF tempstr[255]:STRING
@@ -148,6 +148,20 @@ PROC main() HANDLE
       Raise('unable to open aedoor.library')
     ENDIF
   ENDIF
+
+  GetDT(diface,EXPRESS_VERSION,0)
+  StrCopy(tempstr,strfield)
+  invalid:=TRUE
+  IF (p:=InStr(tempstr,'.'))>=0
+    tempstr[p]:=' '
+    major:=Val(tempstr+1)
+    minor:=Val(tempstr+p+1)
+    IF ((major>5) OR ((major=5) AND (minor>3)))
+      invalid:=FALSE
+    ENDIF
+  ENDIF
+  
+  IF invalid THEN Raise('this door requires /X 5.4.0 or higher to function')
 
   GetDT(diface,BB_MAINLINE,0)        /* no string input here, so use 0 as last parameter */
   StrCopy(commandLine,strfield)
