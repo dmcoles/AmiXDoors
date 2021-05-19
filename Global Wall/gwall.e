@@ -72,7 +72,6 @@ DEF serverHost[255]:STRING
 DEF serverPort=1541
 DEF timeout=10
 DEF fds=NIL:PTR TO LONG
-DEF timeoutError=FALSE
 
 DEF bbsList: PTR TO bbsItem
 DEF wallItems: PTR TO wallItem
@@ -80,7 +79,10 @@ DEF diface,strfield:LONG
 
 DEF colourpresets: PTR TO LONG
 DEF settings:settingsData
-DEF jsonBuffer
+DEF jsonBuffer=NIL
+
+DEF debugLogFile[255]:STRING
+DEF tempFile[255]:STRING
 
 DEF aemode
 
@@ -113,6 +115,36 @@ PROC fullTrim(src:PTR TO CHAR)
   DisposeLink(tempStr)
 ENDPROC
 
+->returns system time converted to c time format
+PROC getSystemTime()
+  DEF currDate: datestamp
+  DEF startds:PTR TO datestamp
+
+  startds:=DateStamp(currDate)
+  ->2922 days between 1/1/70 and 1/1/78
+
+ENDPROC (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600,Mod(startds.tick,50)
+
+PROC debugLog(str:PTR TO CHAR)
+  DEF currTime,currTick
+  DEF fh
+  DEF logline
+  
+  IF StrLen(debugLogFile)>0
+    fh:=Open(debugLogFile,MODE_READWRITE)
+    IF fh<>0
+      logline:=String(StrLen(str)+20)
+      Seek(fh,0,OFFSET_END)
+      currTime,currTick:=getSystemTime()
+
+      StringF(logline,'\d.\l\z\d[2] \s\n',currTime,currTick,str)
+      Fputs(fh,logline)
+      Close(fh)
+      DisposeLink(logline)
+    ENDIF
+  ENDIF
+ENDPROC
+
 PROC parseConfigFile(configFileName:PTR TO CHAR, configNames:PTR TO stringlist, configValues:PTR TO stringlist)
   DEF fh,p,i
   DEF tempStr[255]:STRING
@@ -143,6 +175,10 @@ PROC main()
   DEF displaylines,accesslevel,pagenum,rep,redo,style,inputBuffer,textdata,bbsname, username, displaytext, colour, comment
   DEF configNames:PTR TO stringlist
   DEF configValues:PTR TO stringlist
+  DEF tempStr[255]:STRING
+  DEF rescode=0,bufsize,fh2=0
+ 
+  StrCopy(tempFile,'T:jsondata')
  
   StrCopy(serverHost,'scenewall.bbs.io')
   fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
@@ -159,12 +195,16 @@ PROC main()
       ENDIF
     ENDIF
 
-    configNames:=NEW configNames.stringlist(3)
+    configNames:=NEW configNames.stringlist(5)
     configNames.add('SERVERHOST')
     configNames.add('SERVERPORT')
     configNames.add('TIMEOUT')
-    
-    configValues:=NEW configValues.stringlist(3)
+    configNames.add('DEBUGLOG')
+    configNames.add('TEMPFILE')
+
+    configValues:=NEW configValues.stringlist(5)
+    configValues.add('')
+    configValues.add('')
     configValues.add('')
     configValues.add('')
     configValues.add('')
@@ -174,7 +214,10 @@ PROC main()
     IF StrLen(configValues.item(0))>0 THEN StrCopy(serverHost,configValues.item(0))
     IF StrLen(configValues.item(1))>0 THEN serverPort:=Val(configValues.item(1))
     IF StrLen(configValues.item(2))>0 THEN timeout:=Val(configValues.item(2))
+    IF StrLen(configValues.item(3))>0 THEN StrCopy(debugLogFile,configValues.item(3))
+    IF StrLen(configValues.item(4))>0 THEN StrCopy(tempFile,configValues.item(4))
 
+    debugLog('wall door started')
 
     settings.node:=String(10)
     StrCopy(settings.node,'0')
@@ -188,6 +231,8 @@ PROC main()
     settings.screenheight:=getAEIntValue(DT_LINELENGTH)
 
     readSettings()
+    debugLog('settings file read')
+
     applyColours()
 
     displaylines:=calculateDisplayLines()
@@ -214,19 +259,57 @@ PROC main()
     pagenum:=1
     rep:=1
     redo:=1
-    
+       
     inputBuffer:=String(255)
+    debugLog('about to get data')
     WHILE rep<>0 
 
       style:=settings.style
       IF redo=1
-        jsonBuffer:=String(30000)
-        getwalljson(pagenum,displaylines, jsonBuffer)
-        decodejson(jsonBuffer)
+        rescode:=getwalljson(pagenum,displaylines, tempFile)
+        debugLog('wall data downloaded')
+
+        bufsize:=FileLength(tempFile)
+        IF bufsize=-1
+          rescode:=0
+          jsonBuffer:=0
+        ELSE
+          jsonBuffer:=String(bufsize)
+          IF (jsonBuffer<>NIL) 
+            fh2:=Open(tempFile,MODE_OLDFILE)
+            IF fh2<>0
+              Read(fh2,jsonBuffer,bufsize)
+              SetStr(jsonBuffer,bufsize)
+              Close(fh2)
+              DeleteFile(tempFile)
+              fh2:=0
+            ENDIF
+          ENDIF
+        ENDIF
+
+
+        IF rescode=200
+          decodejson(jsonBuffer)
+          debugLog('wall data decoded')
+        ELSE
+          StringF(tempStr,'html response error: rescode=\d',rescode)
+          debugLog(tempStr)
+          IF jsonBuffer<>NIL 
+            debugLog(jsonBuffer)
+            DisposeLink(jsonBuffer)
+          ENDIF
+          
+          transmit('[0mThe server is not currently responding. Please try again later')
+          END fds[32]
+          IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
+          IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
+          CleanUp()
+        ENDIF
         DisposeLink(jsonBuffer)
         sendCLS()
 
-        SELECT style
+
+      SELECT style
           CASE 1
             header1(FALSE)
           CASE 2
@@ -240,6 +323,7 @@ PROC main()
         ENDSELECT
 
         displaywalldata(displaylines,FALSE)
+        debugLog('wall data display')
 
         SELECT style
           CASE 1
@@ -259,13 +343,7 @@ PROC main()
       transmit('')
       textdata:=String(255)
 
-      IF timeoutError
-        transmit('[0mThe server is not currently responding. Please try again later')
-        END fds[32]
-        IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
-        IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
-        RETURN
-      ENDIF
+      debugLog('about to read keypress')
 
       StringF(textdata,'\s\s\s\s\s\s\s\s\s\s',settings.textcolour,'pUSH[1CtHE[1CbUTTON[1C?![1C[',settings.textcolourYN,'y',settings.textcolour,'/',settings.textcolourYN,'N',settings.textcolour,'][0m ')
       sendStr(textdata)
@@ -298,8 +376,11 @@ PROC main()
         rep:=0  
       ENDIF
     ENDWHILE
+
+    debugLog('main loop done')
         
     IF (StrCmp(inputBuffer,'Y'))=FALSE
+      debugLog('no comment, shutdown')
       transmit('')
       transmit('[0mok be like that...')
       transmit('')
@@ -307,6 +388,8 @@ PROC main()
       IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
       CleanUp()
     ENDIF
+
+    debugLog('get user comment')
 
     comment:=String(255)
     query('Enter your comment: ',56,inputBuffer)
@@ -319,6 +402,8 @@ PROC main()
       IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
       CleanUp()
     ENDIF
+
+    debugLog('get anon details')
 
     transmit('')
     displaytext:=String(255)
@@ -357,6 +442,8 @@ PROC main()
       IF ((StrCmp(inputBuffer,'G')) OR (StrCmp(inputBuffer,'2'))) THEN StrCopy(colour,'2')
     ENDWHILE
 
+    debugLog('check and post')
+
     IF EstrLen(colour)>0
       encodeAnsiColour(colour,displaytext)
       StrAdd(displaytext,comment)
@@ -367,13 +454,15 @@ PROC main()
       transmit('')
     ENDIF
 
+    debugLog('shutdown')
+
     END fds[32]
     IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
     IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
 ENDPROC
 
 PROC sysopMode()
-  DEF pagenum,displaylines, key,seperator1,seperator2,seperator3,sendtext,style
+  DEF pagenum,displaylines, key,seperator1,seperator2,seperator3,sendtext,style,bufsize,rescode=0,fh2=0
 
   pagenum:=1
   displaylines:=calculateDisplayLines()-4
@@ -395,10 +484,25 @@ PROC sysopMode()
         header2(FALSE)
     ENDSELECT
 
-    jsonBuffer:=String(30000)
-    getwalljson(pagenum,displaylines, jsonBuffer)
-    decodejson(jsonBuffer)
-    DisposeLink(jsonBuffer)
+    rescode:=getwalljson(pagenum,displaylines, tempFile)
+    bufsize:=FileLength(tempFile)
+    IF bufsize=-1
+      rescode:=0
+      jsonBuffer:=NIL
+    ELSE
+      jsonBuffer:=New(bufsize)
+      IF (jsonBuffer<>NIL) 
+        fh2:=Open(tempFile,MODE_OLDFILE)
+        IF fh2<>0
+          Read(fh2,jsonBuffer,bufsize)
+          Close(fh2)
+          DeleteFile(tempFile)
+          fh2:=0
+        ENDIF
+      ENDIF
+    ENDIF
+    IF rescode=200 THEN decodejson(jsonBuffer)
+    IF jsonBuffer<>NIL THEN DisposeLink(jsonBuffer)
     displaywalldata(displaylines,TRUE)
 
     SELECT style
@@ -554,7 +658,7 @@ PROC sysopRemove()
 ENDPROC
 
 PROC sysopSettingsUpdate()
-  DEF pagenum,displaylines,inputBuffer,displaytext,style,seperator1,seperator2,seperator3
+  DEF pagenum,displaylines,inputBuffer,displaytext,style,seperator1,seperator2,seperator3,rescode=0,bufsize,fh2=0
 
   pagenum:=1
   displaylines:=calculateDisplayLines()-4
@@ -577,10 +681,27 @@ PROC sysopSettingsUpdate()
         header2(FALSE)
     ENDSELECT
 
-    jsonBuffer:=String(30000)
-    getwalljson(pagenum,displaylines, jsonBuffer)
-    decodejson(jsonBuffer)
-    DisposeLink(jsonBuffer)
+    getwalljson(pagenum,displaylines, tempFile)
+    
+    bufsize:=FileLength(tempFile)
+    IF bufsize=-1
+      rescode:=0
+      jsonBuffer:=0
+    ELSE
+      jsonBuffer:=New(bufsize)
+      IF (jsonBuffer<>NIL) 
+        fh2:=Open(tempFile,MODE_OLDFILE)
+        IF fh2<>0
+          Read(fh2,jsonBuffer,bufsize)
+          Close(fh2)
+          DeleteFile(tempFile)
+          fh2:=0
+        ENDIF
+      ENDIF
+    ENDIF
+
+    IF rescode=200 THEN decodejson(jsonBuffer)
+    IF jsonBuffer<>NIL THEN DisposeLink(jsonBuffer)
     displaywalldata(displaylines,TRUE)
 
     SELECT style
@@ -1192,13 +1313,17 @@ PROC getToken(tokenBuffer,sourcedata,position)
     0-9*/
 ENDPROC position
 
-PROC httpRequest(requestdata:PTR TO CHAR, outTextBuffer)
+PROC httpRequest(requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF i,s,n
   DEF sa=0:PTR TO sockaddr_in
   DEF addr: PTR TO LONG
   DEF hostEnt: PTR TO hostent
   DEF buf
   DEF tv:timeval
+  DEF tempstr[255]:STRING
+  DEF rescode=0
+  DEF first=TRUE
+  DEF fh=0,p
 
 	buf:=String(BUFSIZE+4)
   NEW sa
@@ -1207,7 +1332,17 @@ PROC httpRequest(requestdata:PTR TO CHAR, outTextBuffer)
 	IF (socketbase)
     SetErrnoPtr({errno},4)
 
+    debugLog('httprequest - socket library opened')
     hostEnt:=GetHostByName(serverHost)
+    IF (hostEnt=NIL)
+      debugLog('httprequest - gethostbyname error')
+      CloseSocket(s)
+      CloseLibrary(socketbase)     
+      DisposeLink(buf)
+      END sa      
+      RETURN 0
+    ENDIF
+
     addr:=hostEnt.h_addr_list[]
     addr:=addr[]
 
@@ -1218,50 +1353,82 @@ PROC httpRequest(requestdata:PTR TO CHAR, outTextBuffer)
 
     s:=Socket(2,1,0)
     IF (s>=0)
-    
-        IoctlSocket(s,FIONBIO,[1])
-        setSingleFDS(s)
-        timeoutError:=FALSE
+      debugLog('httprequest - socket created')
 
-        Connect(s,sa,SIZEOF sockaddr_in)
-        
-        tv.secs:=timeout
-        tv.micro:=0
-        
-        n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
-       
-        IoctlSocket(s,FIONBIO,[0])
+      IoctlSocket(s,FIONBIO,[1])
+      setSingleFDS(s)
 
-        IF (n<=0)
-            timeoutError:=TRUE
-            CloseSocket(s)
-            RETURN
-        ENDIF
+      Connect(s,sa,SIZEOF sockaddr_in)
+      
+      debugLog('httprequest - connection made')
 
-        Send(s,requestdata,StrLen(requestdata),0)
+      tv.secs:=timeout
+      tv.micro:=0
+      
+      n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
+      
+      IoctlSocket(s,FIONBIO,[0])
 
-        i:=0
-        REPEAT
-            i:=Recv(s,buf,BUFSIZE-1,0)
-            IF (i>0) AND (outTextBuffer<>NIL)
-              StrAdd(outTextBuffer,buf,i)
-            ENDIF
-        UNTIL i<=0
+      IF (n<=0)
+        debugLog('httprequest - waitselect error')
         CloseSocket(s)
+        CloseLibrary(socketbase)
+        DisposeLink(buf)
+        END sa        
+        RETURN 0
+      ENDIF
+
+      debugLog('requestdata:')
+      debugLog(requestdata)
+      Send(s,requestdata,StrLen(requestdata),0)
+
+      i:=0
+      debugLog('httprequest - get data')
+
+      IF tempFile<>NIL
+        fh:=Open(tempFile,MODE_NEWFILE)
+        IF fh=0 
+          CloseSocket(s)
+          CloseLibrary(socketbase)
+          DisposeLink(buf)
+          END sa
+          RETURN 0
+        ENDIF
+      ENDIF
+
+      REPEAT
+        i:=Recv(s,buf,BUFSIZE-1,0)
+        StringF(tempstr,'httprequest - received \d',i)
+        debugLog(tempstr)
+
+        IF first AND (i>0)
+          StrCopy(tempstr,buf,20)
+          first:=FALSE
+          p:=InStr(tempstr,' ')
+          IF p>=0 THEN rescode:=Val(tempstr+p+1)
+        ENDIF
+        IF (i>0) AND (fh<>0)
+          Write(fh,buf,i)
+        ENDIF        
+      UNTIL i<=0
+      CloseSocket(s)
+      Close(fh)
+    ELSE
+      debugLog('httprequest - create socket error')
     ENDIF
     CloseLibrary(socketbase)
 	ENDIF
   DisposeLink(buf)
   END sa
-ENDPROC
+  debugLog('httprequest - done')
+ENDPROC rescode
 
 /* gets the json and puts it in OutTextBuffer */
-PROC getwalljson(pagenum,maxitems, outTextBuffer)
+PROC getwalljson(pagenum,maxitems, tempfile:PTR TO CHAR)
   DEF getcmd[255]:STRING
 
   StringF(getcmd,'GET /GlobalWall/api/WallItems?itemCount=\d&pagenum=\d HTTP/1.0\b\nHost:\s\b\n\b\n',maxitems,pagenum,serverHost)
-  httpRequest(getcmd,outTextBuffer)
-ENDPROC 
+ENDPROC httpRequest(getcmd,tempfile)
 
 PROC postcomment(username, bbsname, comment)
   DEF senddata
