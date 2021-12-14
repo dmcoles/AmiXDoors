@@ -361,15 +361,16 @@
 				if (upkb>999) {
 				  var i = upkb >> 10
 				  var f = ((upkb & 1023) * 10) >> 10
-                  var ul = ('----' + i + '.'+f+'G')
-                  ul = ul.slice(ul.length - 4)
+          if (i>9) {
+            var ul = ('----' + i +'G')
+          } else {
+            var ul = ('----' + i + '.'+f+'G')
+          }
 				} else {
                   var ul = ('----' + upkb+'M')
-                  ul = ul.slice(ul.length - 4)
 				}
 			} else {
                var ul = ('----' + callItem.Upload)
-               ul = ul.slice(ul.length - 4)
 			}
 				  
 
@@ -380,16 +381,23 @@
 			  if (dnkb>999) {
 				 var i = dnkb >> 10
 				 var f = ((dnkb & 1023) * 10) >> 10
-                 var dl = ('----' + i + '.'+f+'G')
-                 dl = dl.slice(dl.length - 4)
+         if (i>9) {
+           var dl = ('----' + i + 'G')
+         } else {
+           var dl = ('----' + i + '.'+f+'G')
+         }
 			  } else {
                 var dl = ('----' + dnkb+'M')
-                dl = dl.slice(dl.length - 4)
 			  }
 			} else {
                var dl = ('----' + callItem.Download)
-               dl = dl.slice(dl.length - 4)
 			}
+
+
+      if (dl.length>8) { dl = '----LOTS' }
+      if (ul.length>8) { ul = '----LOTS' }
+      dl = dl.slice(dl.length - 4)
+      ul = ul.slice(ul.length - 4)
 
               output = '  <font color="#00ffff">' + callItem.Username.substring(0,18).padEnd(18) + '</font><font color="#0000ff">:</font><font color="#00ff00">' + callItem.Bbsname.substring(0,21).padEnd(21) + '</font><font color="#0000ff">:</font>' + callItem.Dateon.substring(0, 5) + '<font color="#0000ff">:</font><font color="#00ffff">' + callItem.Timeon + '-' + callItem.Timeoff + '</font><font color="#0000ff">:</font>' + callItem.Actions + '<font color="#0000ff">:</font>' + ul + '<font color="#0000ff">:</font>' + dl + '\n'
               document.getElementById("callsbody").innerHTML = document.getElementById("callsbody").innerHTML + output
@@ -674,34 +682,34 @@
 
             var colour = '<font color="#ffffff">';
 
-            if (comment.indexOf('\33[0m')>=0) colour = '<font color="#ffffff">';
-            if (comment.indexOf('\33[31m')>=0) colour = '<font color="#ff0000">';
-            if (comment.indexOf('\33[32m')>=0) colour = '<font color="#00ff00">';
-            if (comment.indexOf('\33[33m')>=0) colour = '<font color="#ffff00">';
-            if (comment.indexOf('\33[34m')>=0) colour = '<font color="#0000ff">';
-            if (comment.indexOf('\33[35m')>=0) colour = '<font color="#ff00ff">';
-            if (comment.indexOf('\33[36m')>=0) colour = '<font color="#00ffff">';
-            if (comment.indexOf('\33[37m')>=0) colour = '<font color="#ffffff">';
+            if ((comment.indexOf('\33[0m')>=0) || (comment.indexOf('\33[0;0m')>=0)) colour = '<font color="#ffffff">';
+            if ((comment.indexOf('\33[31m')>=0) || (comment.indexOf('\33[0;31m')>=0)) colour = '<font color="#ff0000">';
+            if ((comment.indexOf('\33[32m')>=0) || (comment.indexOf('\33[0;32m')>=0)) colour = '<font color="#00ff00">';
+            if ((comment.indexOf('\33[33m')>=0) || (comment.indexOf('\33[0;33m')>=0)) colour = '<font color="#ffff00">';
+            if ((comment.indexOf('\33[34m')>=0) || (comment.indexOf('\33[0;34m')>=0)) colour = '<font color="#0000ff">';
+            if ((comment.indexOf('\33[35m')>=0) || (comment.indexOf('\33[0;35m')>=0)) colour = '<font color="#ff00ff">';
+            if ((comment.indexOf('\33[36m')>=0) || (comment.indexOf('\33[0;36m')>=0)) colour = '<font color="#00ffff">';
+            if ((comment.indexOf('\33[37m')>=0) || (comment.indexOf('\33[0;37m')>=0)) colour = '<font color="#ffffff">';
             
             var regex = new RegExp('\33', 'g');
             comment = comment.replace(regex,'');
 
-            regex = new RegExp('\\[0m', 'g');
+            regex = new RegExp('\\[0?;?0m', 'g');
             comment = comment.replace(regex,'');
-            regex = new RegExp('\\[31m', 'g');
+            regex = new RegExp('\\[0?;?31m', 'g');
             comment = comment.replace(regex,'');
-            regex = new RegExp('\\[32m', 'g');
+            regex = new RegExp('\\[0?;?32m', 'g');
 
             comment = comment.replace(regex,'');
-            regex = new RegExp('\\[33m', 'g');
+            regex = new RegExp('\\[0?;?33m', 'g');
             comment = comment.replace(regex,'');
-            regex = new RegExp('\\[34m', 'g');
+            regex = new RegExp('\\[0?;?34m', 'g');
             comment = comment.replace(regex,'');
-            regex = new RegExp('\\[35m', 'g');
+            regex = new RegExp('\\[0?;?35m', 'g');
             comment = comment.replace(regex, '');
-            regex = new RegExp('\\[36m', 'g');
+            regex = new RegExp('\\[0?;?36m', 'g');
             comment = comment.replace(regex, '');
-            regex = new RegExp('\\[37m', 'g');
+            regex = new RegExp('\\[0?;?37m', 'g');
             comment = comment.replace(regex, '');
             comment = comment.substring(0, 60)
             while (comment.length<60) {
