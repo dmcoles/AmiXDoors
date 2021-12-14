@@ -4,10 +4,10 @@ JSON parser
 OPT OSVERSION=37,REG=5
 
   MODULE 'dos/dos','*jsonParser','*stringList'
-  MODULE	'socket'
-  MODULE	'net/netdb'
+  MODULE    'socket'
+  MODULE    'net/netdb'
   MODULE  'devices/timer'
-  MODULE	'net/in'
+  MODULE    'net/in'
   MODULE 'AEDoor'                 /* Include libcalls & constants */
 
 CONST BUFSIZE=8192
@@ -159,7 +159,11 @@ PROC displayData(fh,scrnclear,style,centreName)
           IF upkb>999
             i:=Shr(upkb,10)
             f:=Shr(Mul(upkb AND 1023,10),10)
-            StringF(upload,'----\d.dG',i,f)
+            IF (i>9)
+              StringF(upload,'----\dG',i)
+            ELSE
+              StringF(upload,'----\d.\dG',i,f)
+            ENDIF
           ELSE
             StringF(upload,'----\dM',upkb)
           ENDIF
@@ -176,7 +180,11 @@ PROC displayData(fh,scrnclear,style,centreName)
           IF downkb>999
             i:=Shr(downkb,10)
             f:=Shr(Mul(downkb AND 1023,10),10)
-            StringF(download,'----\d.\dG',i,f)
+            IF (i>9)
+              StringF(download,'----\dG',i)
+            ELSE 
+              StringF(download,'----\d.\dG',i,f)
+            ENDIF
             
           ELSE
             StringF(download,'----\dM',downkb)
@@ -344,33 +352,33 @@ PROC replacestr(sourcestring,searchtext,replacetext)
 ENDPROC
 
 PROC extractdata(outfh,path:PTR TO CHAR, js:PTR TO CHAR, t, count, doit)
-	DEF i, j,s,n,s2,s3,l1,l2,tot
+    DEF i, j,s,n,s2,s3,l1,l2,tot
   DEF tempstr[255]:STRING
   DEF path2[255]:ARRAY OF CHAR
 
   DEF tok:PTR TO jsmntok_t,tok2:PTR TO jsmntok_t
-	IF (count = 0)
-		RETURN 0,NIL,0
-	ENDIF
+    IF (count = 0)
+        RETURN 0,NIL,0
+    ENDIF
   tok:=t
-	IF (tok.type = JSMN_PRIMITIVE)
+    IF (tok.type = JSMN_PRIMITIVE)
     IF js[tok.start]="n"
       ->null
       RETURN 1,js+tok.start,0
     ELSE
       RETURN 1,js+tok.start,tok.end - tok.start
     ENDIF
-	ELSEIF (tok.type = JSMN_STRING)
-		RETURN 1,js+tok.start,tok.end - tok.start
-	ELSEIF (tok.type = JSMN_OBJECT)
-		j:=0
+    ELSEIF (tok.type = JSMN_STRING)
+        RETURN 1,js+tok.start,tok.end - tok.start
+    ELSEIF (tok.type = JSMN_OBJECT)
+        j:=0
     tot:=0
-		FOR i:=0 TO tok.size-1
-			n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,FALSE)
+        FOR i:=0 TO tok.size-1
+            n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,FALSE)
       j:=j+n
       tot:=tot+l1
 
-			n,s2,l2:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,FALSE)
+            n,s2,l2:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,FALSE)
       tok2:=t+((1+j)*SIZEOF jsmntok_t)
       IF (tok2.type=JSMN_PRIMITIVE) OR (tok2.type=JSMN_STRING)
         tot:=tot+l2+1+StrLen(path)+1
@@ -379,11 +387,11 @@ PROC extractdata(outfh,path:PTR TO CHAR, js:PTR TO CHAR, t, count, doit)
       ENDIF
       j:=j+n
       tot++
-		ENDFOR
+        ENDFOR
     s:=String(tot)
-		j:=0
-		FOR i:=0 TO tok.size-1
-			n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,doit)
+        j:=0
+        FOR i:=0 TO tok.size-1
+            n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,doit)
       j:=j+n
 
       AstrCopy(path2,path)
@@ -395,7 +403,7 @@ PROC extractdata(outfh,path:PTR TO CHAR, js:PTR TO CHAR, t, count, doit)
         ->WriteF('test=\s\n',tempstr)
       ENDIF
 
-			n,s3,l2:=extractdata(outfh,path2,js, t+((1+j)*SIZEOF jsmntok_t), count-j,doit)
+            n,s3,l2:=extractdata(outfh,path2,js, t+((1+j)*SIZEOF jsmntok_t), count-j,doit)
       IF (tok2.type=JSMN_PRIMITIVE) OR (tok2.type=JSMN_STRING)
         IF l2>0
           IF l1>0
@@ -431,27 +439,27 @@ PROC extractdata(outfh,path:PTR TO CHAR, js:PTR TO CHAR, t, count, doit)
         ENDIF
       ENDIF
       j:=j+n
-		ENDFOR
+        ENDFOR
 
-		RETURN j+1,s,EstrLen(s)
-	ELSEIF (tok.type = JSMN_ARRAY)
-		j:=0
+        RETURN j+1,s,EstrLen(s)
+    ELSEIF (tok.type = JSMN_ARRAY)
+        j:=0
     tot:=0
-		FOR i:=0 TO tok.size-1
-			n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,FALSE)
+        FOR i:=0 TO tok.size-1
+            n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,FALSE)
       j:=j+n
       tot:=tot+l1+1
-		ENDFOR
+        ENDFOR
     s:=String(tot)
-		j:=0
-		FOR i:=0 TO tok.size-1
+        j:=0
+        FOR i:=0 TO tok.size-1
       n,s2,l1:=extractdata(outfh,path,js, t+((1+j)*SIZEOF jsmntok_t), count-j,TRUE)
       j:=j+n
       StrAdd(s,s2,l1)
       StrAdd(s,'\n')
     ENDFOR
-		RETURN j+1,s,EstrLen(s)
-	ENDIF
+        RETURN j+1,s,EstrLen(s)
+    ENDIF
 ENDPROC 0
 
 PROC setSingleFDS(socketVal)
@@ -477,13 +485,20 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF n
   DEF tv:timeval
 
-	buf:=String(BUFSIZE+4)
+    buf:=String(BUFSIZE+4)
   NEW sa
 
-	socketbase:=OpenLibrary('bsdsocket.library',2)
-	IF (socketbase)
+    socketbase:=OpenLibrary('bsdsocket.library',2)
+    IF (socketbase)
 
     hostEnt:=GetHostByName(serverHost)
+    IF hostEnt=NIL
+      CloseLibrary(socketbase)
+      DisposeLink(buf)
+      END sa     
+      RETURN FALSE
+    ENDIF
+    
     addr:=hostEnt.h_addr_list[]
     addr:=addr[]
 
@@ -495,49 +510,58 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
     s:=Socket(2,1,0)
     IF (s>=0)
    
-        IoctlSocket(s,FIONBIO,[1])
-        setSingleFDS(s)
+      IoctlSocket(s,FIONBIO,[1])
+      setSingleFDS(s)
 
-        Connect(s,sa,SIZEOF sockaddr_in)
-        
-        tv.secs:=timeout
-        tv.micro:=0
-        
-        n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
-       
-        IoctlSocket(s,FIONBIO,[0])
+      Connect(s,sa,SIZEOF sockaddr_in)
+      
+      tv.secs:=timeout
+      tv.micro:=0
+      
+      n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
+      
+      IoctlSocket(s,FIONBIO,[0])
 
-        IF n<=0
-            CloseSocket(s)
-            RETURN 0
-        ENDIF
-
-        Send(s,requestdata,StrLen(requestdata),0)
-
-        i:=0
-
-        IF tempFile<>NIL
-          fh:=Open(tempFile,MODE_NEWFILE)
-          IF fh=0 THEN RETURN FALSE
-        ENDIF
-                
-        REPEAT
-            i:=Recv(s,buf,BUFSIZE-1,0)
-            IF first 
-              StrCopy(result,buf,20)
-              first:=FALSE
-              p:=InStr(result,' ')
-              IF p>=0 THEN rescode:=Val(result+p+1)
-            ENDIF
-            IF (i>0) AND (fh<>0)
-              Write(fh,buf,i)
-            ENDIF
-        UNTIL i<=0
+      IF n<=0
         CloseSocket(s)
-        Close(fh)
+        CloseLibrary(socketbase)
+        DisposeLink(buf)
+        END sa
+        RETURN FALSE
+      ENDIF
+
+      Send(s,requestdata,StrLen(requestdata),0)
+
+      i:=0
+
+      IF tempFile<>NIL
+        fh:=Open(tempFile,MODE_NEWFILE)
+        IF fh=0 
+          CloseSocket(s)
+          CloseLibrary(socketbase)
+          DisposeLink(buf)
+          END sa
+          RETURN FALSE
+        ENDIF
+      ENDIF
+              
+      REPEAT
+        i:=Recv(s,buf,BUFSIZE-1,0)
+        IF first 
+          StrCopy(result,buf,20)
+          first:=FALSE
+          p:=InStr(result,' ')
+          IF p>=0 THEN rescode:=Val(result+p+1)
+        ENDIF
+        IF (i>0) AND (fh<>0)
+          Write(fh,buf,i)
+        ENDIF
+      UNTIL i<=0
+      CloseSocket(s)
+      Close(fh)
     ENDIF
     CloseLibrary(socketbase)
-	ENDIF
+    ENDIF
   DisposeLink(buf)
   END sa
 ENDPROC rescode=200
@@ -613,7 +637,7 @@ PROC getSystemTime()
 ENDPROC (Mul(Mul(startds.days+2922,1440),60)+(startds.minute*60)+(startds.tick/50))+21600
 
 PROC main() HANDLE
-	DEF r,l
+    DEF r,l
   DEF rn:PTR TO CHAR
   DEF p:jsmn_parser
   DEF tok:PTR TO jsmntok_t
@@ -733,7 +757,7 @@ PROC main() HANDLE
   bufsize:=FileLength(tempFile)
   IF bufsize=-1 THEN Raise(10)
   jsonBuffer:=New(bufsize)
-	IF (jsonBuffer = NIL) THEN Raise(6)
+    IF (jsonBuffer = NIL) THEN Raise(6)
 
   fh2:=Open(tempFile,MODE_OLDFILE)
   IF fh2<>0
@@ -742,8 +766,8 @@ PROC main() HANDLE
     fh2:=0
   ENDIF
 
-	/* Prepare parser */
-	jsmn_init(p)
+    /* Prepare parser */
+    jsmn_init(p)
   
   fh2:=Open(tempFile,MODE_NEWFILE)
   IF fh2=0 THEN Raise(7)
@@ -761,10 +785,10 @@ PROC main() HANDLE
   jsonStart:=jsonBuffer+position
   tokcount:=jsmn_parse(p, jsonStart, bufsize-position, 0, 0)
 
-	tok:=New(SIZEOF jsmntok_t * tokcount)
-	IF (tok = NIL) THEN Raise(9)   
+    tok:=New(SIZEOF jsmntok_t * tokcount)
+    IF (tok = NIL) THEN Raise(9)   
   
-	jsmn_init(p)
+    jsmn_init(p)
   r:=jsmn_parse(p, jsonStart, bufsize-position, tok, tokcount)
   IF (r>=0)
   ->tok, p.toknext
@@ -792,10 +816,10 @@ EXCEPT DO
   SELECT exception
     CASE ERR_KICK; transmit('Error: Requires V37\n\n')
     CASE 6; transmit('Could not allocate enough memory to hold json data\n\n')
-		CASE 7; transmit('Could not open temporary working file\n\n')
-		CASE 8; transmit('Could not find json data in http response\n\n')
-		CASE 9; transmit('Could not allocate enough memory to parse json file\n\n')
-		CASE 10; transmit('Could not get json data from server\n\n')
+        CASE 7; transmit('Could not open temporary working file\n\n')
+        CASE 8; transmit('Could not find json data in http response\n\n')
+        CASE 9; transmit('Could not allocate enough memory to parse json file\n\n')
+        CASE 10; transmit('Could not get json data from server\n\n')
   ENDSELECT
   IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
   IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)

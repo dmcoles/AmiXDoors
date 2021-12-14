@@ -41,13 +41,19 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF tv:timeval
 
 	buf:=String(BUFSIZE+4)
-  NEW sa
+  	NEW sa
 
 	socketbase:=OpenLibrary('bsdsocket.library',2)
 	IF (socketbase)
     SetErrnoPtr({errno},4)
 
     hostEnt:=GetHostByName(serverHost)
+    IF hostEnt=NIL
+      CloseLibrary(socketbase)
+      DisposeLink(buf)
+      END sa
+      RETURN FALSE
+    ENDIF
     addr:=hostEnt.h_addr_list[]
     addr:=addr[]
 
@@ -73,7 +79,10 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
 
         IF n<=0
             CloseSocket(s)
-            RETURN 0
+        CloseLibrary(socketbase)
+        DisposeLink(buf)
+        END sa
+        RETURN FALSE
         ENDIF
 
         Send(s,requestdata,StrLen(requestdata),0)
