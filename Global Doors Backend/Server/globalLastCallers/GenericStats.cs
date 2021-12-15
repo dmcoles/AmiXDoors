@@ -23,4 +23,10 @@ namespace GlobalLastCallers
             stats.Add(g);
         }
     }
+
+    public class GenericStat
+    {
+        public string name { get; set; }
+        public Int64 count { get; set; }
+    }
 }
