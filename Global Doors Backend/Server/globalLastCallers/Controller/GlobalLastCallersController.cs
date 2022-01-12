@@ -266,7 +266,7 @@ namespace GlobalLastCallers.Controller
                 sqlCmd.Dispose();
             }
 
-            SqlCommand sqlCmd2 = new SqlCommand("select 1 as rid, convert(varchar,getdate() - 1,105) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where dateon = convert(date, getdate() - 1) union all select 2 as rid, convert(varchar,getdate() - 2,105) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where dateon = convert(date, getdate() - 2) order by rid", sqlConn);
+            SqlCommand sqlCmd2 = new SqlCommand("select 1 as rid, convert(varchar,getdate() - 1,5) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where dateon = convert(date, getdate() - 1) union all select 2 as rid, convert(varchar,getdate() - 2,5) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where dateon = convert(date, getdate() - 2) order by rid", sqlConn);
             SqlDataReader sqlData2 = sqlCmd2.ExecuteReader();
             try
             {
