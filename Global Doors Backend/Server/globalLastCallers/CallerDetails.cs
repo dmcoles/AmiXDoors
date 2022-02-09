@@ -9,6 +9,7 @@ namespace GlobalLastCallers
     {
         public int Id { get; set; }
         public string Username { get; set; }
+        public string Location { get; set; }
         public string Bbsname { get; set; }
         public string Dateon { get; set; }
         public string Timeon { get; set; }

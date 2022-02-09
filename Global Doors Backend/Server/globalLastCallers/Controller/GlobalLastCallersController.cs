@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Web.Http;
 using System.Web.Http.Description;
 
@@ -23,6 +24,7 @@ namespace GlobalLastCallers.Controller
             CallerDetails detailItem = new CallerDetails();
             detailItem.Id = (int)sqlData["id"];
             detailItem.Username = (string)sqlData["username"];
+            if (sqlData.IsDBNull(sqlData.GetOrdinal("location"))) detailItem.Location = ""; else detailItem.Location = (string)sqlData["location"];
             detailItem.Bbsname = (string)sqlData["bbsname"];
             detailItem.Dateon = (string)sqlData["dateon"];
             detailItem.Timeon = (string)sqlData["timeon"];
@@ -218,7 +220,7 @@ namespace GlobalLastCallers.Controller
         [HttpGet]
         [Route("")]
         // GET: api/GlobalLastCallers
-        public IHttpActionResult GetLastCalls([FromUri] int count = 10, [FromUri] int start = 1, string tzname = null)
+        public IHttpActionResult GetLastCalls([FromUri] int count = 10, [FromUri] int start = 1, string tzname = null, string bbsname = null)
         {
             TimeZoneInfo tzi = null;
             int? tzMins = null;
@@ -237,17 +239,29 @@ namespace GlobalLastCallers.Controller
 
             SqlCommand sqlCmd;
 
+            StringBuilder sqlText = new StringBuilder();
+
+            string bbsfilter = "";
+            string bbsfilter2 = "";
+            if (bbsname != null)
+            {
+                bbsfilter = "where bbsname = '" + bbsname + "'";
+                bbsfilter2 = "bbsname = '" + bbsname + "' and ";
+            }
+
             if (tzMins != null)
-                sqlCmd = new SqlCommand("select * from " +
+                sqlText.Append("select * from " +
                 "(select Top " + (start + count - 1).ToString() + " ROW_NUMBER() over(order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)) desc) as rn, " +
-                "id, username, bbsname, " +
+                "id, username, bbsname, location, " +
                 "convert(varchar, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)), 105) as dateon, " +
                 "substring(convert(char, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, convert(time, timeon)), 8), 1, 5) timeon, " +
                 "case when timeoff='--:--' then timeoff else substring(convert(char, dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, convert(time, timeoff)), 8), 1, 5) end timeoff, " +
-                "actions, upload, download from LastCallers " +
-                "order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)) desc,id desc) s where s.rn >= " + start.ToString(), sqlConn);
+                "actions, upload, download from LastCallers " +bbsfilter+
+                " order by dateadd(mi,case when tzoffset is null then 0 else -tzoffset + " + tzMins.ToString() + " end, dateon + convert(datetime, timeon)) desc,id desc) s where s.rn >= " + start.ToString());
             else
-                sqlCmd = new SqlCommand("select * from (select Top " + (start + count - 1).ToString() + " ROW_NUMBER() over(order by lastCallers.dateon desc,lastCallers.timeon desc) as rn,id,username,bbsname,convert(varchar,dateon,105) as dateon,timeon,timeoff,actions,upload,download from LastCallers order by lastCallers.dateon desc,lastCallers.timeon desc,id desc) s where s.rn>=" + start.ToString(), sqlConn);
+                sqlText.Append("select * from (select Top " + (start + count - 1).ToString() + " ROW_NUMBER() over(order by lastCallers.dateon desc,lastCallers.timeon desc) as rn,id,username,bbsname,location,convert(varchar,dateon,105) as dateon,timeon,timeoff,actions,upload,download from LastCallers "+bbsfilter+" order by lastCallers.dateon desc,lastCallers.timeon desc,id desc) s where s.rn>=" + start.ToString());
+
+            sqlCmd = new SqlCommand(sqlText.ToString(),sqlConn);
 
             CallerStats stats = new CallerStats();
 
@@ -266,7 +280,7 @@ namespace GlobalLastCallers.Controller
                 sqlCmd.Dispose();
             }
 
-            SqlCommand sqlCmd2 = new SqlCommand("select 1 as rid, convert(varchar,getdate() - 1,5) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where dateon = convert(date, getdate() - 1) union all select 2 as rid, convert(varchar,getdate() - 2,5) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where dateon = convert(date, getdate() - 2) order by rid", sqlConn);
+            SqlCommand sqlCmd2 = new SqlCommand("select 1 as rid, convert(varchar,getdate() - 1,5) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where "+bbsfilter2+"dateon = convert(date, getdate() - 1) union all select 2 as rid, convert(varchar,getdate() - 2,5) as statdate, count(*) as calls, isnull(sum(convert(bigint,upload)),0) as upload, isnull(sum(convert(bigint,download)),0) as download, isnull(max(topcps),0) as topcps from lastcallers where "+bbsfilter2+" dateon = convert(date, getdate() - 2) order by rid", sqlConn);
             SqlDataReader sqlData2 = sqlCmd2.ExecuteReader();
             try
             {
@@ -295,7 +309,7 @@ namespace GlobalLastCallers.Controller
                 sqlCmd2.Dispose();
             }
 
-            SqlCommand sqlCmd3 = new SqlCommand("select count(*) as allcalls from lastCallers", sqlConn);
+            SqlCommand sqlCmd3 = new SqlCommand("select count(*) as allcalls from lastCallers "+bbsfilter, sqlConn);
             try
             {
                 stats.records.allcalls = (int)sqlCmd3.ExecuteScalar();
@@ -306,7 +320,7 @@ namespace GlobalLastCallers.Controller
             }
 
 
-            SqlCommand sqlCmd4 = new SqlCommand("select top 3 bbsname,count(*) as subcount from lastCallers group by bbsname order by count(*) desc", sqlConn);
+            SqlCommand sqlCmd4 = new SqlCommand("select top 3 bbsname,count(*) as subcount from lastCallers "+bbsfilter+" group by bbsname order by count(*) desc", sqlConn);
             SqlDataReader sqlData4 = sqlCmd4.ExecuteReader();
             try
             {
@@ -333,7 +347,7 @@ namespace GlobalLastCallers.Controller
                 sqlCmd4.Dispose();
             }
 
-            SqlCommand sqlCmd5 = new SqlCommand("select top 1 count(*) as allcalls from lastCallers group by dateon order by allcalls desc", sqlConn);
+            SqlCommand sqlCmd5 = new SqlCommand("select top 1 count(*) as allcalls from lastCallers "+bbsfilter+" group by dateon order by allcalls desc", sqlConn);
             try
             {
                 stats.records.recordcalls = (int)sqlCmd5.ExecuteScalar();
@@ -402,8 +416,9 @@ namespace GlobalLastCallers.Controller
 
             if (existingId == DBNull.Value)
             {
-                SqlCommand sqlCmd = new SqlCommand("insert into LastCallers (username,bbsname,dateon,timeon,timeoff,actions,upload,download,topcps,tzoffset) values (@username,@bbsname,@dateon,@timeon,@timeoff,@actions,@upload,@download,@topcps,@tzoffset) SELECT CAST(scope_identity() AS int);", sqlConn);
+                SqlCommand sqlCmd = new SqlCommand("insert into LastCallers (username,location,bbsname,dateon,timeon,timeoff,actions,upload,download,topcps,tzoffset) values (@username,@location,@bbsname,@dateon,@timeon,@timeoff,@actions,@upload,@download,@topcps,@tzoffset) SELECT CAST(scope_identity() AS int);", sqlConn);
                 sqlCmd.Parameters.Add("username", SqlDbType.VarChar);
+                sqlCmd.Parameters.Add("location", SqlDbType.VarChar);
                 sqlCmd.Parameters.Add("bbsname", SqlDbType.VarChar);
                 sqlCmd.Parameters.Add("dateon", SqlDbType.Date);
                 sqlCmd.Parameters.Add("timeon", SqlDbType.VarChar);
@@ -415,6 +430,12 @@ namespace GlobalLastCallers.Controller
                 sqlCmd.Parameters.Add("tzoffset", SqlDbType.Int);
 
                 sqlCmd.Parameters["username"].Value = newCaller.Username;
+
+                if ((newCaller.Location != null) && (newCaller.Location!=String.Empty))
+                    sqlCmd.Parameters["location"].Value = newCaller.Location;
+                else
+                    sqlCmd.Parameters["location"].Value = DBNull.Value;
+
                 sqlCmd.Parameters["bbsname"].Value = newCaller.Bbsname;
                 sqlCmd.Parameters["dateon"].Value = dateOn;
                 sqlCmd.Parameters["timeon"].Value = newCaller.Timeon;
@@ -474,6 +495,33 @@ namespace GlobalLastCallers.Controller
             return Ok(newCaller);
         }
 
+        [HttpGet]
+        [Route("bbslist")]
+        [ResponseType(typeof(List<string>))]
+        // GET: api/GlobalLastCallers/bbslist
+        public IHttpActionResult GetBBSNames()
+        {
+            List<string> bbsList = new List<string>();
+
+            SqlCommand sqlCmd = new SqlCommand("select distinct bbsname from lastcallers", sqlConn);
+
+            if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
+            SqlDataReader sqlData = sqlCmd.ExecuteReader();
+            try
+            {
+                while (sqlData.Read())
+                {
+                    bbsList.Add(sqlData.GetString(0));
+                }
+            }
+            finally
+            {
+                sqlData.Close();
+                sqlData.Dispose();
+                sqlCmd.Dispose();
+            }
+            return Ok(bbsList);
+        }
 
         protected override void Dispose(bool disposing)
         {

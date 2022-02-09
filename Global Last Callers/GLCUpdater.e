@@ -30,7 +30,7 @@ ENDPROC
 PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
  DEF i,p,s
   DEF sa=0:PTR TO sockaddr_in
-  DEF addr: PTR TO LONG
+  DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF buf
   DEF fh=0
@@ -41,7 +41,7 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF tv:timeval
 
 	buf:=String(BUFSIZE+4)
-  	NEW sa
+  NEW sa
 
 	socketbase:=OpenLibrary('bsdsocket.library',2)
 	IF (socketbase)
@@ -54,13 +54,13 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
       END sa
       RETURN FALSE
     ENDIF
-    addr:=hostEnt.h_addr_list[]
-    addr:=addr[]
+    addr:=Long(hostEnt.h_addr_list)
+    addr:=Long(addr)
 
     sa.sin_len:=SIZEOF sockaddr_in
     sa.sin_family:=2
     sa.sin_port:=serverPort
-    sa.sin_addr:=addr[]
+    sa.sin_addr:=addr
 
     s:=Socket(2,1,0)
     IF (s>=0)
@@ -149,7 +149,7 @@ PROC cleanstr(sourcestring)
   replacestr(sourcestring,'"','\\"')
 ENDPROC
 
-PROC postdata(timeout,userName:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps)
+PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps)
   DEF senddata
   DEF linedata
   DEF res
@@ -158,7 +158,7 @@ PROC postdata(timeout,userName:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO C
   cleanstr(bbsName)
 
   linedata:=String(350+StrLen(userName)+StrLen(bbsName)+StrLen(dateOn)+StrLen(timeOn)+StrLen(timeOff)+StrLen(actions))
-  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d\s\b\n','{"Id": ',0,',"Username": "',userName,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps,'}')
+  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d\s\b\n','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps,'}')
   senddata:=String(EstrLen(linedata)+500)
   IF StrLen(timeZone)>0
     replacestr(timeZone,' ','+')
@@ -261,6 +261,7 @@ PROC main()
   DEF timeOff[10]:STRING
   DEF userName[100]:STRING
   DEF uploads,downloads,topcps
+  DEF location[200]:STRING
   DEF bbsName[100]:STRING
   DEF actions[11]:STRING
 
@@ -288,7 +289,7 @@ PROC main()
 
   DEF callStartPosition,probableStart,foundEnd
   DEF fileLength
-  DEF p
+  DEF p,p2
 
   DEF myargs:PTR TO LONG,rdargs
   
@@ -410,11 +411,23 @@ PROC main()
       IF (p>=0) AND (StrLen(logLine)>(p+2))
         StrCopy(tempStr,logLine+p+2,ALL)
         p:=InStr(tempStr,' (SYSOP_LOCAL) ')
-        IF p>=0 THEN StrCopy(userName,tempStr,p)
+        IF p>=0 
+          StrCopy(userName,tempStr,p)
+          StrCopy(location,tempStr+p+15)
+        ENDIF
         p:=InStr(tempStr,' (F2_LOCAL) ')
-        IF p>=0 THEN StrCopy(userName,tempStr,p)
+        IF p>=0 
+          StrCopy(userName,tempStr,p)
+          StrCopy(location,tempStr+p+12)
+        ENDIF
         p:=InStr(tempStr,' (CONNECT')
-        IF p>=0 THEN StrCopy(userName,tempStr,p)
+        IF p>=0
+          StrCopy(userName,tempStr,p)
+          p2:=InStr(tempStr+p,') ')
+          IF p2>=0
+            StrCopy(location,tempStr+p+p2+2)
+          ENDIF
+        ENDIF
       ENDIF
       IF (StrLen(logLine)>19) AND (StrCmp(logLine+19,' NEW ',5)) THEN newUser:=TRUE
       IF newUser
@@ -487,7 +500,7 @@ PROC main()
 
       IF skip=FALSE
         WriteF('Processing call on \s at \s from \s[\d]....',dateOn,timeOn,userName,userNum)
-        IF postdata(timeout,userName,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
+        IF postdata(timeout,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
       ELSE  
         WriteF('Skipping call on \s at \s from \s[\d]\n',dateOn,timeOn,userName,userNum)
       ENDIF

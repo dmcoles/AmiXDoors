@@ -22,7 +22,7 @@
   <font color="#ff00ff"> /_____/__/__/_____/ //__/ /_____/__/__/_____/_____/_____/__/__/_____/ /</font>
   <font color="#ff00ff"> \_____\__\__\_____\/ \__\/\_____\__\__\_____\_____\_____\__\__\_____\/</font><font color="#0000ff">SdN</font>
   <font color="#ffff00">             GLOBAL LASTCALLERS! - (C) REbEL/qUARTEX                     </font>
-  <font color="#00ffff">USERNAME           BBS                   DATE  TIME ON BBS ACTIONS    UPL DWNL</font>
+  <font id="callersHeader" color="#00ffff">USERNAME           BBS                   DATE  TIME ON BBS ACTIONS    UPL DWNL</font>
   <font color="#0000ff">------------------v---------------------v-----v-----------v----------v----v----</font>
 <div id="callsbody"></div>  <font color="#0000ff">------------------^---------------------^-----^-----------^----------^----^----</font>
   <font color="#ffff00">[</font><font color="#00ffff">D</font><font color="#ffff00">]</font><font color="#ff00ff">OWNLOAD</font>   <font color="#ffff00">[</font><font color="#00ffff">d</font><font color="#ffff00">]</font><font color="#ff00ff">OWNLOAD FAIL</font>  <font color="#ffff00">[</font><font color="#00ffff">o</font><font color="#ffff00">]</font><font color="#ff00ff">PERATOR PAGED!</font>  <font color="#ffff00">[</font><font color="#00ffff">F</font><font color="#ffff00">]</font><font color="#ff00ff">ILE SCAN</font>   <font color="#ffff00">[</font><font color="#00ffff">A</font><font color="#ffff00">]</font><font color="#ff00ff">CCOUNT EDIT!</font>
@@ -83,6 +83,9 @@
 <option value='13'>Monthly Top User CPS</option>
 <option value='14'>Weekly Top BBS CPS</option>
 <option value='15'>Monthly Top BBS CPS</option>
+</select><select onchange="getCallItems(selectedBBSName())" name='bbsname' id='bbsname'>
+<option value=''>All bbss</option>
+</select>
 </select>
 <div style="font-family: 'TopazNew', Fallback, monospace;" id = "callstats"><font color="#0000ff">
 
@@ -120,13 +123,13 @@
 
       function callsprevpage() {
         page++
-        getCallItems()
+        getCallItems(selectedBBSName())
       }
 
       function callsnextpage() {
         page--
         if (page<1) { page = 1 }
-        getCallItems()
+        getCallItems(selectedBBSName())
       }
 
       function keyPressHandler(event) {
@@ -160,11 +163,19 @@
        }
 
 
-       function getCallItems() {
+	   function selectedBBSName() {   
+	     return encodeURIComponent(document.getElementById("bbsname").value);
+	   }
+	   
+       function getCallItems(bbsname) {
         var tz=document.getElementById("tzone").value
 		
         var start = ((page - 1) * 30) + 1
-        requestcalls.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start, true);
+		if (bbsname.length>0) {
+			requestcalls.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start + '&bbsname='+bbsname, true);
+		} else {
+			requestcalls.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start, true);
+		}
          // Send request
          requestcalls.send();
        }
@@ -181,6 +192,13 @@
          requestDailyDiz.open('GET', 'http://scenewall.bbs.io:1541/GlobalWall/api/DailyFileDiz/', true);
          // Send request
          requestDailyDiz.send();
+       }
+
+       function getBBSnames() {
+   
+         requestBBSnames.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/bbslist', true);
+         // Send request
+         requestBBSnames.send();
        }
 
        function postWallMessage(comment,userName,colour) {
@@ -277,6 +295,7 @@
       for (n=0; n<dizLines.length; n++) {
         maxLen=Math.max(maxLen,dizLines[n].length)
       }
+	  
       
       var p=88-((88-maxLen)/2)
       
@@ -347,10 +366,32 @@
         }
        }
 
+	   	function bbsNamesRead() {
+		  var list = "<option value=''>All bbs</option>"
+
+		  if (requestBBSnames.status >= 200 && requestBBSnames.status < 400) {
+			var data = JSON.parse(this.response);
+			data.forEach(function (bbs) {
+				list = list + "<option value='"+bbs+"'>"+bbs+"</option>"
+			})
+		  }
+
+		  document.getElementById("bbsname").innerHTML=list
+		}
+
        function callitemsRead() {
         if (requestcalls.status >= 200 && requestcalls.status < 400) {
           var data = JSON.parse(this.response);
+		  var singleBBS = false;
 
+		  if (selectedBBSName().length==0) {
+			document.getElementById("callersHeader").innerHTML = 'USERNAME           BBS                   DATE  TIME ON BBS ACTIONS    UPL DWNL';
+		  } else {
+			document.getElementById("callersHeader").innerHTML = 'USERNAME           LOCATION              DATE  TIME ON BBS ACTIONS    UPL DWNL';
+			singleBBS = true;
+		  }
+		  
+		  
           document.getElementById("callsbody").innerHTML=""
           data.calls.forEach(function (callItem) {
 
@@ -399,7 +440,11 @@
       dl = dl.slice(dl.length - 4)
       ul = ul.slice(ul.length - 4)
 
-              output = '  <font color="#00ffff">' + callItem.Username.substring(0,18).padEnd(18) + '</font><font color="#0000ff">:</font><font color="#00ff00">' + callItem.Bbsname.substring(0,21).padEnd(21) + '</font><font color="#0000ff">:</font>' + callItem.Dateon.substring(0, 5) + '<font color="#0000ff">:</font><font color="#00ffff">' + callItem.Timeon + '-' + callItem.Timeoff + '</font><font color="#0000ff">:</font>' + callItem.Actions + '<font color="#0000ff">:</font>' + ul + '<font color="#0000ff">:</font>' + dl + '\n'
+	          if (singleBBS) {
+				output = '  <font color="#00ffff">' + callItem.Username.substring(0,18).padEnd(18) + '</font><font color="#0000ff">:</font><font color="#00ff00">' + callItem.Location.substring(0,21).padEnd(21) + '</font><font color="#0000ff">:</font>' + callItem.Dateon.substring(0, 5) + '<font color="#0000ff">:</font><font color="#00ffff">' + callItem.Timeon + '-' + callItem.Timeoff + '</font><font color="#0000ff">:</font>' + callItem.Actions + '<font color="#0000ff">:</font>' + ul + '<font color="#0000ff">:</font>' + dl + '\n'
+			  } else {
+				output = '  <font color="#00ffff">' + callItem.Username.substring(0,18).padEnd(18) + '</font><font color="#0000ff">:</font><font color="#00ff00">' + callItem.Bbsname.substring(0,21).padEnd(21) + '</font><font color="#0000ff">:</font>' + callItem.Dateon.substring(0, 5) + '<font color="#0000ff">:</font><font color="#00ffff">' + callItem.Timeon + '-' + callItem.Timeoff + '</font><font color="#0000ff">:</font>' + callItem.Actions + '<font color="#0000ff">:</font>' + ul + '<font color="#0000ff">:</font>' + dl + '\n'
+			  }
               document.getElementById("callsbody").innerHTML = document.getElementById("callsbody").innerHTML + output
           })
 
@@ -786,7 +831,7 @@
       function showCallItems() {
         page=1
         showingWall = false
-        getCallItems()
+        getCallItems(selectedBBSName())
         element = document.getElementById("callsMain")
         element.style.display = ""
         element = document.getElementById("wallMain")
@@ -818,6 +863,10 @@
 
        var requestDailyDiz = new XMLHttpRequest();
          requestDailyDiz.onload = dailyDizRead
+
+       var requestBBSnames = new XMLHttpRequest();
+         requestBBSnames.onload = bbsNamesRead
+
 
        var page = 1
        var showingWall = true
@@ -869,11 +918,12 @@
        
       var output = '';
 
-      getCallItems()
+      getCallItems(selectedBBSName())
       showWallItems()
       getBBSad()
       getCallStats()
 	  getDailyDiz()
+	  getBBSnames()
 		</script>
 
 </body>

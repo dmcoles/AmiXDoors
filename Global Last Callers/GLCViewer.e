@@ -26,6 +26,38 @@ DEF diface:LONG
 DEF strfield:LONG
 DEF fds=NIL:PTR TO LONG
 
+PROC urlEncode(str:PTR TO CHAR)
+  DEF tempStr:PTR TO CHAR
+ 
+  tempStr:=String(255)
+  StrCopy(tempStr,TrimStr(str))
+
+  replacestr(tempStr,'%','%25')
+  replacestr(tempStr,' ','%20')
+  replacestr(tempStr,'"','%22')
+  replacestr(tempStr,'#','%23')
+  replacestr(tempStr,'$','%24')
+  replacestr(tempStr,'&','%26')
+  replacestr(tempStr,'+','%2B')
+  replacestr(tempStr,',','%2C')
+  replacestr(tempStr,'/','%2F')
+  replacestr(tempStr,':','%3A')
+  replacestr(tempStr,';','%3B')
+  replacestr(tempStr,'<','%3C')
+  replacestr(tempStr,'=','%3D')
+  replacestr(tempStr,'>','%3E')
+  replacestr(tempStr,'?','%3F')
+  replacestr(tempStr,'@','%40')
+
+  replacestr(tempStr,'[','%5B')
+  replacestr(tempStr,'\\','%5C')
+  replacestr(tempStr,']','%5D')
+  replacestr(tempStr,'^','%5E')
+  replacestr(tempStr,'~','%7E')
+
+  StrCopy(str,tempStr)
+  DisposeLink(tempStr)
+ENDPROC
 
 /* trim spaces from both ends of a string and puts it back in the source estring*/
 PROC fullTrim(src:PTR TO CHAR)
@@ -47,10 +79,11 @@ PROC fullTrim(src:PTR TO CHAR)
 ENDPROC
 
 
-PROC displayData(fh,scrnclear,style,centreName)
+PROC displayData(fh,scrnclear,style,centreName,showlocation)
   DEF tempStr[255]:STRING
-  DEF writeStr[255]:STRING
+  DEF writeStr[300]:STRING
   DEF username[20]:STRING
+  DEF location[25]:STRING
   DEF bbsname[25]:STRING
   DEF dateon[10]:STRING
   DEF timeon[10]:STRING
@@ -107,7 +140,11 @@ PROC displayData(fh,scrnclear,style,centreName)
     transmit('[35m   \\____  [37m [35ml [37m  [35m /[37m:::: :::::::::: ::::::::::::[35m\\____ [37m  [35ml[37m   [35m /[37m:::: :::::::: ::::')
     transmit('[35m   [37m ÷2F÷[35m\\______/[37m:::::.:::::::::::::::::::::::[5C[35m\\______/[37m:::::::::::::: ::::')
     transmit('[1;44;33m                   GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX                     [0m')
-    transmit('[36mUSERNAME [37m[10C[36mBBS [37m[17C[36mDATE [30m [36m TIME ON BBS ACTIONS    UPL DWNL')
+    IF showlocation
+      transmit('[36mUSERNAME [37m[10C[36mLOCATION [37m[13C[36mDATE [30m [36mTIME ON BBS ACTIONS    UPL  DWNL')
+    ELSE
+      transmit('[36mUSERNAME [37m[10C[36mBBS [37m[18C[36mDATE [30m [36mTIME ON BBS ACTIONS    UPL  DWNL')
+    ENDIF
   ENDIF 
   transmit('[34m------------------v---------------------v-----v-----------v----------v----v----')
   WHILE(ReadStr(fh,tempStr)<>-1) OR (StrLen(tempStr)>0)
@@ -118,6 +155,19 @@ PROC displayData(fh,scrnclear,style,centreName)
         match:=TRUE
       ENDIF
         
+      IF StrCmp('calls\\Location=',tempStr,15)
+        IF centreName
+          StrCopy(location,TrimStr(tempStr+15))
+          WHILE StrLen(location)<21
+            StrAdd(location,' ')
+            StringF(location,' \s',location)
+          ENDWHILE
+        ELSE
+          StrCopy(location,tempStr+15)
+        ENDIF
+        match:=TRUE
+      ENDIF
+
       IF StrCmp('calls\\Bbsname=',tempStr,14)
         IF centreName
           StrCopy(bbsname,TrimStr(tempStr+14))
@@ -197,11 +247,12 @@ PROC displayData(fh,scrnclear,style,centreName)
       
       IF match THEN callsdata++
 
-      IF callsdata=8
+      IF callsdata=9
         callsdata:=0
         IF StrLen(upload)>8 THEN StrCopy(upload,'----LOTS')
         IF StrLen(download)>8 THEN StrCopy(download,'----LOTS')
-        StringF(writeStr,'[36m\l\s[18][34m:[32m\l\s[21][34m:[37m\l\s[5][34m:[37m\l\s[5]-\l\s[5][34m:[36m\l\s[10][34m:[37m\r\s[4][34m:[37m\r\s[4]',username,bbsname,dateon,timeon,timeoff,actions,upload+StrLen(upload)-4,download+StrLen(download)-4)
+        StringF(writeStr,'[36m\l\s[18][34m:[32m\l\s[21][34m:[37m\l\s[5][34m:[37m\l\s[5]-\l\s[5][34m:[36m\l\s[10][34m:[37m\r\s[4][34m:[37m\r\s[4]',username,IF showlocation THEN location ELSE bbsname,dateon,timeon,timeoff,actions,upload+StrLen(upload)-4,download+StrLen(download)-4)
+        
         transmit(writeStr)
       ENDIF
     ENDIF
@@ -475,7 +526,7 @@ ENDPROC
 PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
  DEF i,p,s
   DEF sa=0:PTR TO sockaddr_in
-  DEF addr: PTR TO LONG
+  DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF buf
   DEF fh=0
@@ -499,13 +550,13 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
       RETURN FALSE
     ENDIF
     
-    addr:=hostEnt.h_addr_list[]
-    addr:=addr[]
+    addr:=Long(hostEnt.h_addr_list)
+    addr:=Long(addr)
 
     sa.sin_len:=SIZEOF sockaddr_in
     sa.sin_family:=2
     sa.sin_port:=serverPort
-    sa.sin_addr:=addr[]
+    sa.sin_addr:=addr
 
     s:=Socket(2,1,0)
     IF (s>=0)
@@ -567,15 +618,23 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
 ENDPROC rescode=200
 
 /* gets the json and puts it in OutTextBuffer */
-PROC getjson(timeout,page,count,timeZone:PTR TO CHAR,tempFile:PTR TO CHAR)
+PROC getjson(timeout,page,count,bbsname,timeZone:PTR TO CHAR,tempFile:PTR TO CHAR)
   DEF getcmd[255]:STRING
+  DEF bbsProp[255]:STRING
   DEF start
   start:=((page-1)*count)+1
+  StrCopy(bbsProp,'')
+  IF StrLen(bbsname)>0
+    StrCopy(bbsProp,bbsname)
+    urlEncode(bbsProp)
+    WriteF('bbsname=\s\n',bbsProp)
+    StringF(bbsProp,'&bbsname=\s',bbsProp)
+  ENDIF
   IF StrLen(timeZone)>0
     replacestr(timeZone,' ','+')
-    StringF(getcmd,'GET /GlobalLastCallers/api/GlobalLastCallers?tzname=\s&start=\d&count=\d HTTP/1.0\b\nHost:\s\b\n\b\n',timeZone,start,count,serverHost)
+    StringF(getcmd,'GET /GlobalLastCallers/api/GlobalLastCallers?tzname=\s&start=\d&count=\d\s HTTP/1.0\b\nHost:\s\b\n\b\n',timeZone,start,count,bbsProp,serverHost)
   ELSE
-    StringF(getcmd,'GET /GlobalLastCallers/api/GlobalLastCallers?start=\d&count=\d HTTP/1.0\b\nHost:\s\b\n\b\n',start,count,serverHost)
+    StringF(getcmd,'GET /GlobalLastCallers/api/GlobalLastCallers?start=\d&count=\d\s HTTP/1.0\b\nHost:\s\b\n\b\n',start,count,bbsProp,serverHost)
   ENDIF
   
   ->StringF(getcmd,'GET /api/GlobalLastCallers?start=\d&count=\d HTTP/1.0\b\nHost:\s\b\n\b\n',start,count,serverHost)
@@ -659,6 +718,9 @@ PROC main() HANDLE
   DEF style=1
   DEF timeout=10
   DEF centreName=FALSE
+  DEF bbsname[255]:STRING
+  DEF node=-1
+  DEF myargs:PTR TO LONG,rdargs
 
   KickVersion(37)  -> E-Note: requires V37
 
@@ -677,9 +739,22 @@ PROC main() HANDLE
   page:=1
   count:=10
 
+  myargs:=[0,0]:LONG
+  IF rdargs:=ReadArgs('BBSNAME/K,NODE/N',myargs,NIL)
+    IF myargs[0]<>NIL
+      StrCopy(bbsname,myargs[0])
+    ENDIF
+    IF myargs[1]<>NIL
+      node:=Long(myargs[1])
+    ENDIF
+    FreeArgs(rdargs)
+  ELSE
+    RETURN
+  ENDIF
+
   aemode:=FALSE
-  IF (StrLen(arg)>0)
-    StringF(doorPort,'\s\s','AEDoorPort',arg)
+  IF node==[0 TO 31]
+    StringF(doorPort,'AEDoorPort\d',node)
     IF FindPort(doorPort)
       IF aedoorbase:=OpenLibrary('AEDoor.library',1)
         diface:=CreateComm(arg[])     /* Establish Link   */
@@ -753,11 +828,11 @@ PROC main() HANDLE
   
   IF (style<1) OR (style>4) THEN style:=1
   
-  getjson(timeout,page,count,timeZone,tempFile)
+  getjson(timeout,page,count,bbsname,timeZone,tempFile)
   bufsize:=FileLength(tempFile)
-  IF bufsize=-1 THEN Raise(10)
+  IF bufsize<1 THEN Raise(10)
   jsonBuffer:=New(bufsize)
-    IF (jsonBuffer = NIL) THEN Raise(6)
+  IF (jsonBuffer = NIL) THEN Raise(6)
 
   fh2:=Open(tempFile,MODE_OLDFILE)
   IF fh2<>0
@@ -796,7 +871,7 @@ PROC main() HANDLE
     IF fh2<>0 THEN Close(fh2)
 
     fh2:=Open(tempFile,MODE_OLDFILE)
-    IF fh2<>0 THEN displayData(fh2,scrnclear,style,centreName)
+    IF fh2<>0 THEN displayData(fh2,scrnclear,style,centreName,StrLen(bbsname)>0)
   ELSE
     SELECT r
       CASE JSMN_ERROR_NOMEM
@@ -816,10 +891,10 @@ EXCEPT DO
   SELECT exception
     CASE ERR_KICK; transmit('Error: Requires V37\n\n')
     CASE 6; transmit('Could not allocate enough memory to hold json data\n\n')
-        CASE 7; transmit('Could not open temporary working file\n\n')
-        CASE 8; transmit('Could not find json data in http response\n\n')
-        CASE 9; transmit('Could not allocate enough memory to parse json file\n\n')
-        CASE 10; transmit('Could not get json data from server\n\n')
+    CASE 7; transmit('Could not open temporary working file\n\n')
+    CASE 8; transmit('Could not find json data in http response\n\n')
+    CASE 9; transmit('Could not allocate enough memory to parse json file\n\n')
+    CASE 10; transmit('Could not get json data from server\n\n')
   ENDSELECT
   IF diface<>0 THEN DeleteComm(diface)        /* Close Link w /X  */
   IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)

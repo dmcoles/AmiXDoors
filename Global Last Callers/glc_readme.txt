@@ -25,16 +25,27 @@ GLCUpdater PHANTASM bbs:node1/callerslog IGNORELOCAL IGNORESYSOP
 GLCViewer
 ---------
 
-This part can either be insalled as a standard /X Door (see glc.info in bbscmd). If it is run this way it will request the most up to date
-callers log from the server and display its output to /X. This can take a small amount of time (around 1 second assuming the server is up but
-may be longer if it is down for some reason).
+This part can be insalled as a standard /X Door (see glc.info in bbscmd). If it is run this way it will request the most up to date callers
+log from the server and display its output to /X. This can take a small amount of time (around 1 second assuming the server is up but may be
+longer if it is down for some reason).
 
 If this delay causes frustration it is also possible to run the viewer from a script and the output will be displayed to the cli window so you
 can redirect the output to a file which can be displayed to the user as part of a bulletin or from mci script. You could for example run the
 viewer from the loggoff script or from a scheduled/cron task at a regular interval. The glcviewer requires no parameters when run in this way.
 
+GLCViewer - filtering output
+----------------------------
 
-Configuration file.
+Optionally GLCViewer can also be run (only from script mode) with a parameter to indicate that you wish to filter the output to only include
+one particular BBS. Running it like this:
+
+   GLCViewer BBSNAME "mybbs"
+   
+Will produce an output only containing the entries for "mybbs" and the bbsname column will be remove and the user locations will be shown instead.
+Older versions of the door did not populate the location - so these entries may be blank initially.
+
+GLCViewer - Configuration file
+------------------------------
 
 Most of the configuration entries you will not need to touch but there are some options that will allow you to customise the output in the way
 prefer.
@@ -63,4 +74,3 @@ TIMEZONE=GMT Standard Time
 
 This will make GLCUpdater tell the backend server what timezone you are in when recording the last calls and
 it will also make GLCViewer apply your timezone when viewing the last callers list.
-
