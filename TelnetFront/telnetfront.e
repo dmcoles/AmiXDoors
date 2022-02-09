@@ -45,7 +45,7 @@ PROC main()
   DEF fname[255]:STRING
   DEF fh1,fh2,fh3
   
-  DEF node
+  DEF node,nc,nodecount
   
   DEF user[232]:ARRAY OF CHAR
   DEF stat[32]:ARRAY OF CHAR
@@ -83,12 +83,23 @@ PROC main()
     Close(fh1)
   ENDIF
 
-  transmit('     [34m.------------------------------------------------------------------.')
-  transmit('     [34m|[36mNode[34m| [36mHandle/Username [34m| [36mLocation/Group        [34m| [36mUser Ip Address   [34m|')
-  transmit('     [34m|----+-----------------+-----------------------+-------------------|')
+  transmit('                   [32m/[33m-[34m/[37m kOOL fRONTEND V1.1 bY: rEBEL/QTX [34m\[33m-[32m\')
+  transmit('                         [32m\[33m-[34m\ [37mdES!GN bY: nOP!/STS [34m/[33m-[32m/')
+  transmit('     [35m.------------------------------------------------------------------.')
+  transmit('     [35m|[34mNode[35m| [34mHandle/Username [35m| [34mLocation/Group        [35m| [34mUser Ip Address   [35m|')
+  transmit('     [35m|----+-----------------+-----------------------+-------------------|')
+
+
+  nodecount:=0
+  FOR i:=0 TO 31
+    StringF(fname,'ENV:STATS@\d',i)
+    IF FileExists(fname) THEN nodecount++
+  ENDFOR
+
+  nc:=0
 
   FOR i:=0 TO 31
-
+    nc++
     StrCopy(nameStr,'')
     StrCopy(locStr,'')
     StrCopy(ipAddr,'')
@@ -165,14 +176,20 @@ PROC main()
     centre(ipAddr,17)
 
     IF fh2>0
-      StringF(tempStr,' [34m    | [32m\z\d[2] [34m| [37m\l\s[14]  [34m| [37m\s[21] [34m|[36m \s[17] [34m|',i,nameStr,locStr,ipAddr)
+      IF (nc<nodecount-1)
+        StringF(tempStr,' [35m    | [32m\z\d[2] [35m| [37m\l\s[14]  [35m| [37m\s[21] [35m|[36m \s[17] [35m|',i,nameStr,locStr,ipAddr)
+      ELSEIF (nc=nodecount-1)
+        StringF(tempStr,' [35m_  _| [32m\z\d[2] [35m| [37m\l\s[14]  [35m| [37m\s[21] [35m|[36m \s[17] [35m|',i,nameStr,locStr,ipAddr)
+      ELSEIF (nc=nodecount)
+        StringF(tempStr,' [35m\|-\| [32m\z\d[2] [35m| [37m\l\s[14]  [35m| [37m\s[21] [35m|[36m \s[17] [35m|_  _',i,nameStr,locStr,ipAddr)
+      ENDIF
       transmit(tempStr)
     ENDIF
     
   ENDFOR
 
 
-  transmit('    [34m `-----·-----------------·-----------------------·------------------''')
+  transmit('    [35m `----·-----------------·-----------------------·-------------------|/-|/')
 
   IF (EstrLen(hostName)>0)
     StringF(tempStr,' [34m    | [32mLogin Established from Host :  [37m\l\s[26]        [34m|',hostName)
@@ -181,7 +198,12 @@ PROC main()
     transmit(' [34m    | [32mLogin Established from Host :     [37m N O T  A V A I L A B L E      [34m|')
   ENDIF
 
-  transmit(' [34m    `------------------------------------------------------------------''')
+  StringF(tempStr,' [32mYour Telnet Login Established from Host :  [37m\s[26]  [35m|',host)
+  transmit(tempStr)
+  transmit(' [35m<<-----------.   <<----------------------------------------------------\'')
+  StringF(tempStr,'              [35m|[32mCurrent iP of This System [32m:  [37m\s',bbsip)
+  transmit(tempStr)
+  transmit('              [35m`----------------------------------------------------------->>')
   transmit('[0m')
 
 
