@@ -462,7 +462,8 @@ namespace GlobalLastCallers.Controller
             }
             else
             {
-                SqlCommand sqlUpdateCmd = new SqlCommand("update LastCallers set actions=@actions, upload=@upload, download=@download, topcps=@topcps, tzoffset=@tzoffset where id = @id", sqlConn);
+                SqlCommand sqlUpdateCmd = new SqlCommand("update LastCallers set location=@location, actions=@actions, upload=@upload, download=@download, topcps=@topcps, tzoffset=@tzoffset where id = @id", sqlConn);
+                sqlUpdateCmd.Parameters.Add("location", SqlDbType.VarChar);
                 sqlUpdateCmd.Parameters.Add("actions", SqlDbType.VarChar);
                 sqlUpdateCmd.Parameters.Add("upload", SqlDbType.Int);
                 sqlUpdateCmd.Parameters.Add("download", SqlDbType.Int);
@@ -481,6 +482,11 @@ namespace GlobalLastCallers.Controller
                     sqlUpdateCmd.Parameters["tzoffset"].Value = DBNull.Value;
                 sqlUpdateCmd.CommandTimeout = 60;
 
+                if ((newCaller.Location != null) && (newCaller.Location != String.Empty))
+                    sqlUpdateCmd.Parameters["location"].Value = newCaller.Location;
+                else
+                    sqlUpdateCmd.Parameters["location"].Value = DBNull.Value;
+
                 try
                 {
                     sqlUpdateCmd.ExecuteNonQuery();
@@ -491,6 +497,39 @@ namespace GlobalLastCallers.Controller
                 }
                 newCaller.Id = (int)existingId;
                 newCaller.Dateon = dateOn.ToString("dd-MM-yy");
+            }
+
+            if ((newCaller.ConfNums != null) && (newCaller.ConfUploads != null)) {
+                SqlCommand sqlConfUploadsDel = new SqlCommand("delete from confuploads where callerid = @callerid", sqlConn);
+                sqlConfUploadsDel.Parameters.Add("callerid", SqlDbType.Int);
+                sqlConfUploadsDel.Parameters["callerid"].Value = newCaller.Id;
+                try
+                {
+                    sqlConfUploadsDel.ExecuteNonQuery();
+                }
+                finally
+                {
+                    sqlConfUploadsDel.Dispose();
+                }
+
+                SqlCommand sqlConfUploadsIns = new SqlCommand("insert into confuploads (callerid, confid, upload) values(@callerid,@confid,@upload)", sqlConn);
+                sqlConfUploadsIns.Parameters.Add("callerid", SqlDbType.Int);
+                sqlConfUploadsIns.Parameters.Add("confid", SqlDbType.Int);
+                sqlConfUploadsIns.Parameters.Add("upload", SqlDbType.Int);
+                sqlConfUploadsIns.Parameters["callerid"].Value = newCaller.Id;
+                try
+                {
+                    for (int i = 0; i < newCaller.ConfNums.Count; i++)
+                    {
+                        sqlConfUploadsIns.Parameters["confid"].Value = newCaller.ConfNums[i];
+                        sqlConfUploadsIns.Parameters["upload"].Value = newCaller.ConfUploads[i];
+                        sqlConfUploadsIns.ExecuteNonQuery();
+                    }
+                }
+                finally
+                {
+                    sqlConfUploadsIns.Dispose();
+                }
             }
             return Ok(newCaller);
         }

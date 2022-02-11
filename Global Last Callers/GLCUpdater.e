@@ -149,16 +149,48 @@ PROC cleanstr(sourcestring)
   replacestr(sourcestring,'"','\\"')
 ENDPROC
 
-PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps)
+PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps,confNums:PTR TO LONG,confUploads:PTR TO LONG)
   DEF senddata
   DEF linedata
   DEF res
+  DEF confNumText[255]:STRING
+  DEF confUploadText[255]:STRING
+  DEF tmpstr[20]:STRING
+  DEF i
 
   cleanstr(userName)
   cleanstr(bbsName)
 
+  FOR i:=0 TO ListLen(confNums)-1
+    IF confUploads[i]>0
+      IF EstrLen(confNumText)>0
+        StrAdd(confNumText,',')
+        StrAdd(confUploadText,',')
+      ELSE
+        StrCopy(confNumText,'"confnums": [')
+        StrCopy(confUploadText,'"confuploads": [')
+      ENDIF
+      StringF(tmpstr,'\d',confNums[i])
+      StrAdd(confNumText,tmpstr)
+      StringF(tmpstr,'\d',confUploads[i])
+      StrAdd(confUploadText,tmpstr)
+    ENDIF
+    IF EstrLen(confNumText)>0
+      StrAdd(confNumText,'],')
+      StrAdd(confUploadText,']')
+    ENDIF
+  ENDFOR
+
   linedata:=String(350+StrLen(userName)+StrLen(bbsName)+StrLen(dateOn)+StrLen(timeOn)+StrLen(timeOff)+StrLen(actions))
-  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d\s\b\n','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps,'}')
+  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps)
+  
+  IF EstrLen(confNumText)>0
+    StrAdd(linedata,',')
+    StrAdd(linedata,confNumText)
+    StrAdd(linedata,confUploadText)
+  ENDIF
+    StrAdd(linedata,'}\b\n')
+  
   senddata:=String(EstrLen(linedata)+500)
   IF StrLen(timeZone)>0
     replacestr(timeZone,' ','+')
@@ -284,12 +316,16 @@ PROC main()
   DEF timeout=10
   DEF configNames:PTR TO stringlist
   DEF configValues:PTR TO stringlist 
+  
+  DEF confNums:PTR TO LONG
+  DEF confUploads:PTR TO LONG
+  DEF currentConf,newConf
 
   DEF tempStr[255]:STRING
 
   DEF callStartPosition,probableStart,foundEnd
   DEF fileLength
-  DEF p,p2
+  DEF p,p2,tmp,i
 
   DEF myargs:PTR TO LONG,rdargs
   
@@ -347,6 +383,9 @@ PROC main()
   IF StrLen(configValues.item(2))>0 THEN timeout:=Val(configValues.item(2))
   IF StrLen(configValues.item(3))>0 THEN StrCopy(timeZone,configValues.item(3))
 
+  confNums:=List(100)
+  confUploads:=List(100)
+  currentConf:=0
 
   IF processAll=FALSE
     offset:=4096
@@ -379,10 +418,14 @@ PROC main()
     ENDIF
   ENDIF
   
+  
   IF callStartFound
     Seek(fh,callStartPosition,OFFSET_BEGINNING)
 
     REPEAT
+      SetList(confNums,0)
+      SetList(confUploads,0)
+
       ReadStr(fh,logLine)
     
       StringF(dateOn,'\s[2]-\s[2]-\s[2]',logLine+3,logLine,logLine+6)
@@ -453,10 +496,38 @@ PROC main()
           lostCarrer:=TRUE
         ENDIF
 
+        newConf:=-1
+        IF (InStr(logLine,'\tConference ')=0) AND (InStr(logLine,'Auto-ReJoined')>=0)
+          newConf:=Val(logLine+12)
+        ENDIF
+        
+        
+        IF ((tmp:=InStr(logLine,') Conference Joined'))>=0)
+          WHILE (tmp=>0) AND (logLine[tmp]<>'(') DO tmp--
+          IF (tmp>=0)
+            newConf:=Val(logLine+tmp+1)
+          ENDIF
+        ENDIF
+        
+        IF newConf<>-1
+          currentConf:=-1
+          FOR i:=0 TO ListLen(confNums)-1
+            IF confNums[i]=newConf THEN currentConf:=i
+          ENDFOR
+          IF currentConf=-1
+            ListAdd(confNums,[0])
+            currentConf:=ListLen(confNums)-1
+            confNums[currentConf]:=newConf
+            ListAdd(confUploads,[0])
+          ENDIF
+          newConf:=-1
+        ENDIF
+
         IF (InStr(logLine,' file')>=0) AND (InStr(logLine,' bytes, ')>=0) AND (InStr(logLine,' minute')>=0) AND (InStr(logLine,' second')>=0) AND (InStr(logLine,' cps, ')>=0) AND (InStr(logLine,'% efficiency')>=0) AND (((InStr(previousLine,'Uploading '))>=0) OR ((InStr(previousLine,'Upload moved'))>=0))
           kb,cps:=processTransferLine(logLine)
           IF cps>topcps THEN topcps:=cps
           uploads:=uploads+kb
+          confUploads[currentConf]:=confUploads[currentConf]+kb
           uploadSuccess:=TRUE
         ENDIF
 
@@ -493,14 +564,14 @@ PROC main()
       IF accountEdit THEN actions[7]:="A"
       IF pwdFail THEN actions[8]:="H"
       IF lostCarrer THEN actions[9]:="C"
-      
+           
       skip:=TRUE
       IF (InStr(connectLine,'(CONNECT ')>=0) OR ((InStr(connectLine,'(SYSOP_LOCAL)')>=0) AND (ignoreSysop=FALSE)) OR ((InStr(connectLine,'(F2_LOCAL)')>=0) AND (ignoreLocal=FALSE)) THEN skip:=FALSE
       IF ((userNum=1) AND (ignoreSysopUser=TRUE)) THEN skip:=TRUE    
 
       IF skip=FALSE
         WriteF('Processing call on \s at \s from \s[\d]....',dateOn,timeOn,userName,userNum)
-        IF postdata(timeout,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
+        IF postdata(timeout,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps,confNums,confUploads)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
       ELSE  
         WriteF('Skipping call on \s at \s from \s[\d]\n',dateOn,timeOn,userName,userNum)
       ENDIF

@@ -18,5 +18,8 @@ namespace GlobalLastCallers
         public int? Upload { get; set; }
         public int? Download { get; set; }
         public int? TopCps { get; set; }
+        public List<int> ConfNums { get; set; }
+        public List<int> ConfUploads { get; set; }
+
     }
 }

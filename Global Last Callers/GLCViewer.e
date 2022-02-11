@@ -130,7 +130,11 @@ PROC displayData(fh,scrnclear,style,centreName,showlocation)
     transmit('[37m  [35m /_____/__/__/_____/ //__/ /_____/__/__/_____/_____/_____/__/__/_____/ /')
     transmit('[37m  [35m \\_____\\__\\__\\_____\\/ \\__\\/\\_____\\__\\__\\_____\\_____\\_____\\__\\__\\_____\\/[34mSdN')
     transmit('[1;44;33m                   GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX                     [0m')
-    transmit('[36mUSERNAME [37m[10C[36mBBS [37m[17C[36mDATE [30m [36m TIME ON BBS ACTIONS    UPL DWNL')
+    IF showlocation
+      transmit('[36mUSERNAME [37m[10C[36mLOCATION [37m[13C[36mDATE [30m [36mTIME ON BBS ACTIONS    UPL DWNL')
+    ELSE
+      transmit('[36mUSERNAME [37m[10C[36mBBS [37m[18C[36mDATE [30m [36mTIME ON BBS ACTIONS    UPL DWNL')
+    ENDIF
   ENDIF
   IF (style=2) OR (style=4)
     StrAdd(tempStr,'[0;40;34m [35m  [37m [35m_______  [37m    .........  ........    ......[35m_______[37m[6C.........  ......')
@@ -627,7 +631,6 @@ PROC getjson(timeout,page,count,bbsname,timeZone:PTR TO CHAR,tempFile:PTR TO CHA
   IF StrLen(bbsname)>0
     StrCopy(bbsProp,bbsname)
     urlEncode(bbsProp)
-    WriteF('bbsname=\s\n',bbsProp)
     StringF(bbsProp,'&bbsname=\s',bbsProp)
   ENDIF
   IF StrLen(timeZone)>0
