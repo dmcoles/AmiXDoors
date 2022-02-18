@@ -83,6 +83,14 @@
 <option value='13'>Monthly Top User CPS</option>
 <option value='14'>Weekly Top BBS CPS</option>
 <option value='15'>Monthly Top BBS CPS</option>
+<option value='18'>All-time Top Uploaders</option>
+<option value='19'>All-time Top BBS Uploads</option>
+<option value='20'>All-time Top Callers</option>
+<option value='21'>All-time Top BBS Calls</option>
+<option value='22'>All-time Top Downloaders</option>
+<option value='23'>All-time Top BBS Downloads</option>
+<option value='24'>All-time Top User CPS</option>
+<option value='25'>All-time Top BBS CPS</option>
 </select><select onchange="getCallItems(selectedBBSName())" name='bbsname' id='bbsname'>
 <option value=''>All bbss</option>
 </select>
@@ -320,36 +328,49 @@
         if (requeststats.status >= 200 && requeststats.status < 400) {
           var data = JSON.parse(this.response);
 
-          var daytext="Day "+data.currentDay.toString()+"/"+data.dayCount.toString()
+		  if (data.dayCount!=0) {
+			var daytext="Day "+data.currentDay.toString()+"/"+data.dayCount.toString()
+		  } else {
+		    var daytext=""
+		  }
           document.getElementById('dayText').innerHTML=daytext.padStart(9)
 
           var sel = document.getElementById('stattype')
           var text= sel.options[sel.selectedIndex].text.substring(0,43).padEnd(43)
 
-          switch (sel.selectedIndex)
+          switch (parseInt(sel.value))
           {
             case 0:
             case 1:
             case 2:
             case 3:
+            case 18:
+            case 19:
               document.getElementById('amountTxt').innerHTML="Upload (KB)"
               break;
             case 4:
             case 5:
             case 6:
             case 7:
+            case 22:
+            case 23:
               document.getElementById('amountTxt').innerHTML="Dnload (KB)"
               break;
             case 8:
             case 9:
             case 10:
             case 11:
+            case 20:
+            case 21:
               document.getElementById('amountTxt').innerHTML="Calls      "
               break;
             case 12:
             case 13:
             case 14:
             case 15:
+            case 24:
+            case 25:
+			
               document.getElementById('amountTxt').innerHTML="CPS        "
               break;
           }
