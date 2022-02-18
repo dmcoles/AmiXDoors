@@ -1,0 +1,107 @@
+﻿<!DOCTYPE HTML>
+<html>
+<head>
+ <meta http-equiv="Content-Type" content="text/html;charset=utf-8"> 
+
+ <style type="text/css"></style>
+<style>@font-face {
+  font-family: 'TopazNew';
+  src: url('topaz/TopazPlus_a500_v1.0.eot'); /* IE9 Compat Modes */
+  src: url('topaz/TopazPlus_a500_v1.0.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
+       url('topaz/TopazPlus_a500_v1.0-webfont.woff2') format('woff2'), /* Super Modern Browsers */
+       url('topaz/topazplus_a500_v1.0-webfont.woff') format('woff'), /* Pretty Modern Browsers */
+       url('topaz/TopazPlus_a500_v1.0.ttf')  format('truetype'), /* Safari, Android, iOS */
+       url('topaz/TopazPlus_a500_v1.0.svg#svgFontName') format('svg'); /* Legacy iOS */
+}
+</style>
+</head>
+<body vlink="#00eeee" text="#ffffff" link="#00ffff" bgcolor="#000000">
+<pre style="font-family: 'TopazNew', Fallback, monospace;">
+<select onchange="getCallStats()" name='TimeOffset' id='statoffset'>
+<option value='1'>1</option>
+<option value='2'>2</option>
+<option value='3'>3</option>
+<option value='4'>4</option>
+<option value='5'>5</option>
+<option value='6'>6</option>
+<option value='7'>7</option>
+<option value='8'>8</option>
+<option value='9'>9</option>
+<option value='10'>10</option>
+<option value='11'>11</option>
+<option value='12'>12</option>
+</select>
+
+
+<select onchange="getCallStats()" name='Statistics' id='stattype'>
+<option value='16'>Weekly Top Uploaders (Amiga Only)</option>
+<option value='17'>Monthly Top Uploaders (Amiga Only)</option>
+</select>
+
+<div style="font-family: 'TopazNew', Fallback, monospace;" id = "callstats"><font color="#0000ff">
+    .- -- -------÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">L</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">S</font>÷÷--÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">S</font>÷-------- -- -.
+    !       ¡                                             ¦ <font color="#00ff00"><span id="dayText">                     </span></font>!
+    !   <font color="#00ff00">Pos</font> ¡ <font color="#ffff00"><span id="statshdr">                                           </span></font> ¦ <font color="#fffff"><span id="amountTxt">CPS        </span></font>           !
+    ¦-------÷-------------- -  -  - --- - -÷- ------------÷------ ---------- -----÷<div id="statsbody">    ¦       !                                             ¦                       ¦</div>    ¦       !                                             ¦                       ¦
+    `-----------[<font color="#00ff00">REbEL/QTX</font>]-- -  ----------- ------- ---- ---[<font color="#00ff00">oRdYNe</font>]- -----------'
+
+
+</font></div>
+Using data from the following Boards:
+<div id="bbslist">
+</div>
+
+</pre>
+<script>
+      function getCallStats() {   
+        requeststats.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/Stats?offset='+document.getElementById('statoffset').value+'&StatType='+document.getElementById('stattype').value, true);
+         // Send request
+         requeststats.send();
+       }
+
+       function statsitemsRead() {
+        if (requeststats.status >= 200 && requeststats.status < 400) {
+          var data = JSON.parse(this.response);
+
+          var daytext="Day "+data.currentDay.toString()+"/"+data.dayCount.toString()+"("+data.endDate+")"
+          document.getElementById('dayText').innerHTML=daytext.padEnd(22)
+
+          var sel = document.getElementById('stattype')
+          var text= sel.options[sel.selectedIndex].text.substring(0,43).padEnd(43)
+
+          switch (sel.selectedIndex)
+          {
+            case 0:
+            case 1:
+              document.getElementById('amountTxt').innerHTML="Upload (KB)"
+              break;
+          }
+          
+          document.getElementById('statshdr').innerHTML=text
+
+          document.getElementById("statsbody").innerHTML=""
+          n=1
+          data.stats.forEach(function (statItem) {
+            output = '    ¦ <font color="#00ff00">'+n.toString().padStart(4)+'. </font>! <font color="#ffff00">'+statItem.name.substring(0,43).padEnd(43)+' </font>¦ <font color="#ffffff">'+statItem.count.toLocaleString().substring(0,21).padEnd(21)+' </font>¦\n'
+            n++
+            document.getElementById("statsbody").innerHTML = document.getElementById("statsbody").innerHTML + output
+          })
+		  
+		  var bbslist = ""
+		  data.bbs.forEach(function (bbs) {
+		  bbslist = bbslist.concat(bbs.concat("\n"))
+		  })
+		  
+		  document.getElementById("bbslist").innerHTML=bbslist
+        }
+       }
+
+       var requeststats = new XMLHttpRequest();
+         requeststats.onload = statsitemsRead
+       
+      getCallStats()
+		</script>
+
+
+</body>
+</html>
