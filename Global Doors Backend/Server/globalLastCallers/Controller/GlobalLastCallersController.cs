@@ -16,7 +16,7 @@ namespace GlobalLastCallers.Controller
     [RoutePrefix("api/GlobalLastCallers")]
     public class GlobalLastCallersController : ApiController
     {
-        public enum StatType { weektopUploads, monthtopUploads, weektopBBSuploads, monthtopBBSuploads, weektopCallers, monthtopCallers, weektopBBSCalls, monthtopBBSCalls, weektopdownloads, monthtopdownloads, weektopBBSdownloads, monthtopBBSdownloads, weektopUserCps, monthtopUserCps, weektopBBSCps, monthtopBBSCps }
+        public enum StatType { weektopUploads, monthtopUploads, weektopBBSuploads, monthtopBBSuploads, weektopCallers, monthtopCallers, weektopBBSCalls, monthtopBBSCalls, weektopdownloads, monthtopdownloads, weektopBBSdownloads, monthtopBBSdownloads, weektopUserCps, monthtopUserCps, weektopBBSCps, monthtopBBSCps, weektopUploadsAmigaOnly, monthtopUploadsAmigaOnly, }
         SqlConnection sqlConn = new SqlConnection(ConfigurationManager.ConnectionStrings["LastCallersDB"].ConnectionString + "; Connection Timeout = 60");
 
         private CallerDetails ReadItem(SqlDataReader sqlData)
@@ -63,6 +63,8 @@ namespace GlobalLastCallers.Controller
         {
             SqlCommand sqlCmd = null;
             SqlCommand sqlCmd2 = null;
+            SqlCommand sqlCmd3 = null;
+
             GenericStats stats;
             stats = new GenericStats();
             switch (statType)
@@ -173,6 +175,21 @@ namespace GlobalLastCallers.Controller
                         sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
                         break;
                     }
+
+                case StatType.weektopUploadsAmigaOnly:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint, confuploads.upload)) from lastcallers,confuploads,bbs where confuploads.callerid=lastcallers.id and bbs.bbsname=lastcallers.bbsname and confuploads.confid=bbs.amigaconfid and convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and confuploads.upload > 0 group by username order by sum(convert(bigint, confuploads.upload)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
+                        sqlCmd3 = new SqlCommand("select distinct bbs.bbsname from lastcallers,confuploads,bbs where confuploads.callerid=lastcallers.id and bbs.bbsname=lastcallers.bbsname and confuploads.confid=bbs.amigaconfid and convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 and confuploads.upload > 0", sqlConn);
+                        break;
+                    }
+                case StatType.monthtopUploadsAmigaOnly:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " username,sum(convert(bigint, confuploads.upload)) from lastcallers,confuploads,bbs where confuploads.callerid=lastcallers.id and bbs.bbsname=lastcallers.bbsname and confuploads.confid=bbs.amigaconfid and convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and confuploads.upload > 0 group by username order by sum(convert(bigint, confuploads.upload)) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
+                        sqlCmd3 = new SqlCommand("select distinct bbs.bbsname from lastcallers,confuploads,bbs where confuploads.callerid=lastcallers.id and bbs.bbsname=lastcallers.bbsname and confuploads.confid=bbs.amigaconfid and convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and confuploads.upload > 0", sqlConn);
+                        break;
+                    }
             }
             if (sqlCmd != null)
             {
@@ -214,6 +231,24 @@ namespace GlobalLastCallers.Controller
                 }
             }
 
+            if (sqlCmd3 != null)
+            {
+                if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
+                SqlDataReader sqlData = sqlCmd3.ExecuteReader();
+                try
+                {
+                    while (sqlData.Read())
+                    {
+                        stats.bbs.Add(sqlData.GetString(0));
+                    }
+                }
+                finally
+                {
+                    sqlData.Close();
+                    sqlData.Dispose();
+                    sqlCmd3.Dispose();
+                }
+            }
             return Ok(stats);
         }
 

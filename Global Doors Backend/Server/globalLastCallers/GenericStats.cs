@@ -8,6 +8,7 @@ namespace GlobalLastCallers
     public class GenericStats
     {
         public List<GenericStat> stats { get; set; }
+        public List<string> bbs{ get; set; }
         public int dayCount { get; set; }
         public int currentDay { get; set; }
         public string endDate { get; set; }
@@ -15,6 +16,7 @@ namespace GlobalLastCallers
         public GenericStats()
         {
             stats = new List<GenericStat>();
+            bbs = new List<string>();
         }
 
         public void Add(string name, Int64 value)
