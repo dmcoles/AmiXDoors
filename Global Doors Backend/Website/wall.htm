@@ -337,7 +337,7 @@
 
           var sel = document.getElementById('stattype')
           var text= sel.options[sel.selectedIndex].text.substring(0,43).padEnd(43)
-
+		  
           switch (parseInt(sel.value))
           {
             case 0:
@@ -348,18 +348,18 @@
             case 19:
               document.getElementById('amountTxt').innerHTML="Upload (KB)"
               break;
-            case 4:
-            case 5:
-            case 6:
-            case 7:
-            case 22:
-            case 23:
-              document.getElementById('amountTxt').innerHTML="Dnload (KB)"
-              break;
             case 8:
             case 9:
             case 10:
             case 11:
+            case 22:
+            case 23:
+              document.getElementById('amountTxt').innerHTML="Dnload (KB)"
+              break;
+            case 4:
+            case 5:
+            case 6:
+            case 7:
             case 20:
             case 21:
               document.getElementById('amountTxt').innerHTML="Calls      "

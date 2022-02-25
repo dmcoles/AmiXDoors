@@ -22,13 +22,13 @@
 <option value='2'>2</option>
 <option value='3'>3</option>
 <option value='4'>4</option>
-<option value='5'>4</option>
-<option value='6'>4</option>
-<option value='7'>4</option>
-<option value='8'>4</option>
-<option value='9'>4</option>
-<option value='10'>4</option>
-<option value='11'>4</option>
+<option value='5'>5</option>
+<option value='6'>6</option>
+<option value='7'>7</option>
+<option value='8'>8</option>
+<option value='9'>9</option>
+<option value='10'>10</option>
+<option value='11'>11</option>
 <option value='12'>12</option>
 </select>
 
@@ -61,6 +61,9 @@
 
 
 </font></div>
+Using data from the following Boards:
+<div id="bbslist">
+</div>
 </pre>
 <script>
       function getCallStats() {   
@@ -116,7 +119,13 @@
             n++
             document.getElementById("statsbody").innerHTML = document.getElementById("statsbody").innerHTML + output
           })
-        }
+		  var bbslist = ""
+
+		  data.bbs.forEach(function (bbs) {
+		  bbslist = bbslist.concat(bbs.concat("\n"))
+		  })
+		  
+		  document.getElementById("bbslist").innerHTML=bbslist        }
        }
 
        var requeststats = new XMLHttpRequest();
