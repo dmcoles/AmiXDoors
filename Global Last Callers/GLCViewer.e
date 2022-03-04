@@ -13,7 +13,7 @@ OPT OSVERSION=37,REG=5
 CONST BUFSIZE=8192
 CONST FIONBIO=$8004667e
 CONST ERR_FDSRANGE=$80000001
-
+CONST GET_CMD_TOOLTYPE=707
 
 ENUM ERR_NONE, ERR_KICK
 
@@ -24,6 +24,7 @@ DEF serverPort=1541
 DEF aemode=FALSE
 DEF diface:LONG
 DEF strfield:LONG
+DEF datafield:PTR TO LONG
 DEF fds=NIL:PTR TO LONG
 
 PROC urlEncode(str:PTR TO CHAR)
@@ -762,6 +763,7 @@ PROC main() HANDLE
       IF aedoorbase:=OpenLibrary('AEDoor.library',1)
         diface:=CreateComm(arg[])     /* Establish Link   */
         strfield:=GetString(diface)  /* Get a pointer to the JHM_String field. Only need to do this once */
+        datafield:=GetData(diface)
 
         IF diface<>0 THEN aemode:=TRUE
       ENDIF
@@ -830,6 +832,15 @@ PROC main() HANDLE
   IF StrLen(configValues.item(8))>0 THEN StrCopy(timeZone,configValues.item(8))
   
   IF (style<1) OR (style>4) THEN style:=1
+  
+  IF aemode
+    datafield[]:=0
+    GetDT(diface,GET_CMD_TOOLTYPE,'LOCALONLY')
+    IF (datafield[])
+      GetDT(diface,JH_BBSNAME,0)
+      StrCopy(bbsname,strfield)
+    ENDIF
+  ENDIF
   
   getjson(timeout,page,count,bbsname,timeZone,tempFile)
   bufsize:=FileLength(tempFile)
