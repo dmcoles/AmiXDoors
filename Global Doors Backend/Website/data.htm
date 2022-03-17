@@ -67,7 +67,7 @@ Using data from the following Boards:
 </pre>
 <script>
       function getCallStats() {   
-        requeststats.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/Stats?offset='+document.getElementById('statoffset').value+'&StatType='+document.getElementById('stattype').value, true);
+        requeststats.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/Stats?offset='+document.getElementById('statoffset').value+'&StatType='+document.getElementById('stattype').value, true);
          // Send request
          requeststats.send();
        }

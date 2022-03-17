@@ -165,7 +165,7 @@
 
 
       function getCallStats() {   
-        requeststats.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/Stats?StatType='+document.getElementById('stattype').value, true);
+        requeststats.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/Stats?StatType='+document.getElementById('stattype').value, true);
          // Send request
          requeststats.send();
        }
@@ -180,9 +180,9 @@
 		
         var start = ((page - 1) * 30) + 1
 		if (bbsname.length>0) {
-			requestcalls.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start + '&bbsname='+bbsname, true);
+			requestcalls.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start + '&bbsname='+bbsname, true);
 		} else {
-			requestcalls.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start, true);
+			requestcalls.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/?tzname='+tz.replace('/ /g','+')+'&count=30&start=' + start, true);
 		}
          // Send request
          requestcalls.send();
@@ -190,27 +190,27 @@
 
        function getBBSad() {
    
-         requestBBSAd.open('GET', 'http://scenewall.bbs.io:1541/GlobalWall/api/BBSAd/', true);
+         requestBBSAd.open('GET', 'https://scenewall.bbs.io:1543/GlobalWall/api/BBSAd/', true);
          // Send request
          requestBBSAd.send();
        }
        
        function getDailyDiz() {
    
-         requestDailyDiz.open('GET', 'http://scenewall.bbs.io:1541/GlobalWall/api/DailyFileDiz/', true);
+         requestDailyDiz.open('GET', 'https://scenewall.bbs.io:1543/GlobalWall/api/DailyFileDiz/', true);
          // Send request
          requestDailyDiz.send();
        }
 
        function getBBSnames() {
    
-         requestBBSnames.open('GET', 'http://scenewall.bbs.io:1541/GlobalLastCallers/api/GlobalLastCallers/bbslist', true);
+         requestBBSnames.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/bbslist', true);
          // Send request
          requestBBSnames.send();
        }
 
        function postWallMessage(comment,userName,colour) {
-        request2.open('POST', 'http://scenewall.bbs.io:1541/GlobalWall/api/WallItems/', true);
+        request2.open('POST', 'https://scenewall.bbs.io:1543/GlobalWall/api/WallItems/', true);
             request2.setRequestHeader("Content-type", "application/json");
 
             switch (colour) {
@@ -834,7 +834,7 @@
 
        function getWallItems() {
    
-         requestwall.open('GET', 'http://scenewall.bbs.io:1541/GlobalWall/api/WallItems/?itemcount=30&pageNum='+page, true);
+         requestwall.open('GET', 'https://scenewall.bbs.io:1543/GlobalWall/api/WallItems/?itemcount=30&pageNum='+page, true);
          // Send request
          requestwall.send();
        }
