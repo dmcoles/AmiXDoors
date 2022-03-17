@@ -116,7 +116,6 @@ PROC displayData(fh,scrnclear,style,centreName,showlocation)
   
   DEF match
   DEF callsdata=0
-  DEF recordstats=0
   DEF upkb,downkb
   DEF i,f
 
@@ -834,8 +833,7 @@ PROC main() HANDLE
   IF (style<1) OR (style>4) THEN style:=1
   
   IF aemode
-    datafield[]:=0
-    GetDT(diface,GET_CMD_TOOLTYPE,'LOCALONLY')
+    SendStrDataCmd(diface,GET_CMD_TOOLTYPE,'LOCALONLY',0)
     IF (datafield[])
       GetDT(diface,JH_BBSNAME,0)
       StrCopy(bbsname,strfield)
