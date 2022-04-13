@@ -15,6 +15,10 @@ OPT LARGE
   MODULE 'dos/dos'
   MODULE 'dos/datetime'
 
+#ifndef EVO_3_4_0
+  FATAL 'This should only be compiled with E-VO Amiga E Compiler'
+#endif
+
 ENUM EXCEPT_CONF_CTOP_DB=1,ERR_NOICON=2
 
 CONST MSGBASE_LOC=604
@@ -86,6 +90,8 @@ DEF userList=NIL:PTR TO stdlist
 DEF totalFiles
 DEF totalBytesBCD[8]:ARRAY OF CHAR
 DEF outputStart,outputReset
+
+DEF outputDebug=FALSE
 
 PROC end() OF stdlist				-> destructor
   DisposeLink(self.items)
@@ -175,7 +181,7 @@ PROC getSystemDate()
   DEF startds:PTR TO datestamp
 
   startds:=DateStamp(currDate)
-ENDPROC startds.days
+ENDPROC startds.days,startds.minute
 
 ->returns system time converted to c time format
 PROC getSystemTime()
@@ -321,6 +327,30 @@ PROC formatDate(dateVal,outDateStr)
   ENDIF
 ENDPROC FALSE
 
+PROC formatDateTime(dateVal,timeVal,outDateStr)
+  DEF d : PTR TO datestamp
+  DEF dt : datetime
+  DEF datestr[10]:STRING
+  DEF daystr[10]:STRING
+  DEF timestr[10]:STRING
+
+  d:=dt.stamp
+  d.tick:=0
+  d.days:=dateVal
+  d.minute:=timeVal
+
+  dt.format:=FORMAT_DOS
+  dt.flags:=0
+  dt.strday:=daystr
+  dt.strdate:=datestr
+  dt.strtime:=timestr
+
+  IF DateToStr(dt)
+    StringF(outDateStr,'\s[3] \s[3] \s[2] \s',daystr,datestr+3,datestr,timestr)
+    RETURN TRUE
+  ENDIF
+ENDPROC FALSE
+
 PROC getAEStringValue(valueKey, valueOutBuffer)
   IF (diface<>0) AND (strfield<>0)
     GetDT(diface,valueKey,0)        /* no string input here, so use 0 as last parameter */
@@ -399,6 +429,10 @@ PROC readConfig(configFile:PTR TO CHAR)
       IF rows<1 THEN rows:=10
     ENDIF
 
+    IF readToolType(do.tooltypes,'DEBUG',tempStr)
+      outputDebug:=TRUE
+    ENDIF
+
     readToolType(do.tooltypes,'MAILUSER',mailUser)
     readToolType(do.tooltypes,'BULLFILE',bullFile)
     readToolType(do.tooltypes,'NEXTDOOR',nextDoor)
@@ -431,15 +465,16 @@ PROC checkPriv(filename:PTR TO CHAR)
   DEF tempName[255]:STRING
   DEF tempStr[255]:STRING
   DEF fh
+  DEF priv=FALSE
 
   StringF(tempName,'\sNode\d/Work/\s',bbsLoc,node,filename)
   fh:=Open(tempName,MODE_OLDFILE)
   IF fh<>0
     ReadStr(fh,tempStr)
-    IF ((EstrLen(tempStr)>0) AND (tempStr[0]="/")) THEN RETURN TRUE
+    IF ((EstrLen(tempStr)>0) AND (tempStr[0]="/")) THEN priv:=TRUE
     Close(fh)
   ENDIF
-ENDPROC FALSE
+ENDPROC priv
 
 PROC doDbReset(dbFilename,initialCreate=FALSE)
   DEF startDate=0,resetDate=0,fh
@@ -542,6 +577,8 @@ PROC checkForReset()
   DEF sysdate=0,sysdate2=0
 
   StringF(confCtopDb,'\s\s',confLocation,dataFileName)
+  writeDebugLog('conftop checking for reset')
+  writeDebugLog(confCtopDb)
 
   fh:=Open(confCtopDb,MODE_OLDFILE)
   IF fh<>0
@@ -550,10 +587,12 @@ PROC checkForReset()
     Close(fh)
     IF sysdate>=sysdate2
       transmit('Resetting Conference Top Uploaders...')
+      writeDebugLog('Resetting top uploaders')
       doDbReset(confCtopDb)
     ENDIF   
   ELSE
     transmit('Creating datafile...')
+    writeDebugLog('Creating datafile')
     doDbReset(confCtopDb,TRUE)
   ENDIF
 ENDPROC
@@ -629,9 +668,10 @@ PROC saveStatOnly(mailStat: PTR TO mailStat)
 ENDPROC TRUE
 
 PROC saveMessageHeader(mailStat:PTR TO mailStat, mh:PTR TO mailHeader)
-  DEF error
+  DEF error,size
   DEF gfh
   DEF filename[255]:STRING
+  DEF tempstr[255]:STRING
 
   StringF(filename,'\s\s',msgBaseLocation,'HeaderFile')
 
@@ -639,25 +679,40 @@ PROC saveMessageHeader(mailStat:PTR TO mailStat, mh:PTR TO mailHeader)
   IF(gfh=0)
     gfh:=Open(filename,MODE_NEWFILE)
     IF(gfh=0)
+      writeDebugLog('unable to open header file')
       RETURN FALSE
     ENDIF
   ENDIF
 
   Seek(gfh,0,OFFSET_END)
 
+  size:=SIZEOF mailHeader
+
   mh.pad:=0
-  error:=Write(gfh,mh,1)    -> STATUS
-  error:=error+Write(gfh,mh+110,1)   ->PAD
-  error:=error+Write(gfh,mh+2,4)   ->MsgNum
-  error:=error+Write(gfh,mh+6,31)   ->toName
-  error:=error+Write(gfh,mh+38,31)   ->fromName
-  error:=error+Write(gfh,mh+70,31)   ->subject
-  error:=error+Write(gfh,mh+110,1)   ->PAD
-  error:=error+Write(gfh,mh+102,9)  ->msgdate, recv & pad
-  error:=error+Write(gfh,mh+110,1)   ->PAD
+  error:=Write(gfh,mh,size)
+
+  StringF(tempstr,'message header status: \c',mh.status)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header msgnum: \d',mh.msgNumb)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header toname: \s',mh.toName)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header fromname: \s',mh.fromName)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header subject: \s',mh.subject)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header msgdate: \d',mh.msgDate)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header recv: \d',mh.recv)
+  writeDebugLog(tempstr)
+  StringF(tempstr,'message header pad: \d',mh.pad)
+  writeDebugLog(tempstr)
 
   Close(gfh)
-  IF(error<>110) THEN RETURN FALSE
+  IF(error<>size)
+    writeDebugLog('Error writing to header file')
+    RETURN FALSE
+  ENDIF
 
   mailStat.highMsgNum:=mailStat.highMsgNum+1
   IF(mailStat.highMsgNum=2) THEN mailStat.lowestNotDel:=1
@@ -676,6 +731,7 @@ PROC readMailStatFile(mailStat:PTR TO mailStat)
       mailStat.lowestKey:=0
       mailStat.lowestNotDel:=0
       mailStat.highMsgNum:=0
+      writeDebugLog('Error reading mailstat')
 
       RETURN FALSE
     ENDIF
@@ -689,6 +745,7 @@ PROC readMailStatFile(mailStat:PTR TO mailStat)
   ENDIF
 
   IF (stat<>SIZEOF mailStat)
+    writeDebugLog('Error writing to mailstat file')
     Close(fd)
     RETURN FALSE
   ENDIF
@@ -722,6 +779,8 @@ PROC saveNewMSG()
       StringF(tempStr,'\s\d',msgBaseLocation,mh.msgNumb)
       IF((f:=Open(tempStr,MODE_NEWFILE)))=0
         transmit('ERROR! Unable to open message output file\b\nMessage has not been saved!')
+        writeDebugLog('ERROR! Unable to open message output file')
+
         RETURN FALSE
       ENDIF
       
@@ -729,10 +788,12 @@ PROC saveNewMSG()
       Close(f)
     ELSE
       transmit('ERROR! Unable to update message header file\b\nMessage has not been saved!')
+      writeDebugLog('ERROR! Unable to update message header file')
     ENDIF
     UnLock(msgbaselock)
   ELSE
-     transmit('ERROR! Another task has the MsgBase locked!\b\nMessage has not been saved!')
+    transmit('ERROR! Another task has the MsgBase locked!\b\nMessage has not been saved!')
+    writeDebugLog('ERROR! Another task has the MsgBase locked')
   ENDIF
 ENDPROC TRUE
 
@@ -740,6 +801,8 @@ PROC sendEall()
   DEF tempStr[255]:STRING
   IF EstrLen(mailUser)>0
     StringF(tempStr,'Sending message to: (\s)',mailUser)
+    transmit(tempStr)
+    writeDebugLog(tempStr)
     saveNewMSG()
   ENDIF
 ENDPROC
@@ -955,6 +1018,26 @@ PROC writeOutput(bull,finalResult=FALSE)
   IF fh<>0 THEN Close(fh)
 ENDPROC
 
+PROC writeDebugLog(logtxt:PTR TO CHAR)
+  DEF debugDateStr[25]:STRING
+  DEF dfh
+  DEF days,mins
+  
+  IF outputDebug=FALSE THEN RETURN
+  
+  days,mins:=getSystemDate()
+  formatDateTime(days,mins,debugDateStr)     
+  StrAdd(debugDateStr,' ')
+  dfh:=Open('PROGDIR:debug.log',MODE_READWRITE)
+  IF dfh<>0 
+    Seek(dfh,0,OFFSET_END)
+    Write(dfh,debugDateStr,StrLen(debugDateStr))
+    Write(dfh,logtxt,StrLen(logtxt))
+    Write(dfh,'\n',1)
+    Close(dfh)
+  ENDIF
+ENDPROC
+
 PROC main() HANDLE
 
   DEF tempStr[255]:STRING
@@ -1024,6 +1107,7 @@ PROC main() HANDLE
         updateStats(uploadFile,userName,userLocation)
       ELSE
         transmit('Private upload, skipping update.')
+        writeDebugLog('Private upload, skipping update.')
       ENDIF
     ELSE
       buildOutput()
@@ -1031,10 +1115,10 @@ PROC main() HANDLE
     ENDIF
   ELSE
     transmit('Conference Top Uploaders is not installed in this conference.')
+    writeDebugLog('Conference Top Uploaders is not installed in this conference.')
   ENDIF
   
 EXCEPT DO
-  DT_GOODFILE
   IF userList<>NIL
     FOR i:=0 TO userList.count()-1
       user:=userList.item(i)
@@ -1051,4 +1135,4 @@ EXCEPT DO
 ENDPROC
 
 verdata:
-  CHAR '$VER: Conftop-II V0.99-021020201031 By REbEL/QTX',0
+  CHAR '$VER: Conftop-II V0.99-130420221312 By REbEL/QTX',0
