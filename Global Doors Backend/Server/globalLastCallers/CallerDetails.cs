@@ -20,6 +20,8 @@ namespace GlobalLastCallers
         public int? TopCps { get; set; }
         public List<int> ConfNums { get; set; }
         public List<int> ConfUploads { get; set; }
+        public List<string> UploadFiles { get; set; }
+        public List<string> DownloadFiles { get; set; }
 
     }
 }

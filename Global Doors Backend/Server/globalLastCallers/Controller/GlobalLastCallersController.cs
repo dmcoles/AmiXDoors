@@ -644,6 +644,71 @@ namespace GlobalLastCallers.Controller
                     sqlConfUploadsIns.Dispose();
                 }
             }
+
+            if (newCaller.UploadFiles != null)
+            {
+                SqlCommand sqlConfUploadsDel = new SqlCommand("delete from calluploadfiles where callerid = @callerid", sqlConn);
+                sqlConfUploadsDel.Parameters.Add("callerid", SqlDbType.Int);
+                sqlConfUploadsDel.Parameters["callerid"].Value = newCaller.Id;
+                try
+                {
+                    sqlConfUploadsDel.ExecuteNonQuery();
+                }
+                finally
+                {
+                    sqlConfUploadsDel.Dispose();
+                }
+
+                SqlCommand sqlConfUploadsIns = new SqlCommand("insert into calluploadfiles (callerid, filename) values(@callerid,@filename)", sqlConn);
+                sqlConfUploadsIns.Parameters.Add("callerid", SqlDbType.Int);
+                sqlConfUploadsIns.Parameters.Add("filename", SqlDbType.VarChar);
+                sqlConfUploadsIns.Parameters["callerid"].Value = newCaller.Id;
+                try
+                {
+                    for (int i = 0; i < newCaller.UploadFiles.Count; i++)
+                    {
+                        sqlConfUploadsIns.Parameters["filename"].Value = newCaller.UploadFiles[i];
+                        sqlConfUploadsIns.ExecuteNonQuery();
+                    }
+                }
+                finally
+                {
+                    sqlConfUploadsIns.Dispose();
+                }
+            }
+
+            if (newCaller.DownloadFiles != null)
+            {
+                SqlCommand sqlConfDownloadsDel = new SqlCommand("delete from calldownloadfiles where callerid = @callerid", sqlConn);
+                sqlConfDownloadsDel.Parameters.Add("callerid", SqlDbType.Int);
+                sqlConfDownloadsDel.Parameters["callerid"].Value = newCaller.Id;
+                try
+                {
+                    sqlConfDownloadsDel.ExecuteNonQuery();
+                }
+                finally
+                {
+                    sqlConfDownloadsDel.Dispose();
+                }
+
+                SqlCommand sqlConfDownloadsIns = new SqlCommand("insert into calldownloadfiles (callerid, filename) values(@callerid,@filename)", sqlConn);
+                sqlConfDownloadsIns.Parameters.Add("callerid", SqlDbType.Int);
+                sqlConfDownloadsIns.Parameters.Add("filename", SqlDbType.VarChar);
+                sqlConfDownloadsIns.Parameters["callerid"].Value = newCaller.Id;
+                try
+                {
+                    for (int i = 0; i < newCaller.DownloadFiles.Count; i++)
+                    {
+                        sqlConfDownloadsIns.Parameters["filename"].Value = newCaller.DownloadFiles[i];
+                        sqlConfDownloadsIns.ExecuteNonQuery();
+                    }
+                }
+                finally
+                {
+                    sqlConfDownloadsIns.Dispose();
+                }
+            }
+
             return Ok(newCaller);
         }
 
