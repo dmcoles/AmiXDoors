@@ -527,7 +527,7 @@ PROC setSingleFDS(socketVal)
   fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
-PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
+PROC httpRequest(timeout,retry,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
  DEF i,p,s
   DEF sa=0:PTR TO sockaddr_in
   DEF addr: LONG
@@ -535,25 +535,29 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF buf
   DEF fh=0
   DEF first=TRUE
-  DEF rescode=0
   DEF result[20]:STRING
+  DEF rescode=0
   DEF n
   DEF tv:timeval
+  DEF try
+  DEF try2
 
-    buf:=String(BUFSIZE+4)
+  buf:=String(BUFSIZE+4)
   NEW sa
 
-    socketbase:=OpenLibrary('bsdsocket.library',2)
-    IF (socketbase)
-
-    hostEnt:=GetHostByName(serverHost)
+  socketbase:=OpenLibrary('bsdsocket.library',2)
+  IF (socketbase)
+    try:=0
+    REPEAT
+      hostEnt:=GetHostByName(serverHost)
+      try++
+    UNTIL (try>=retry) OR (hostEnt<>NIL)
     IF hostEnt=NIL
       CloseLibrary(socketbase)
       DisposeLink(buf)
-      END sa     
-      RETURN FALSE
+      END sa
+      RETURN -1
     ENDIF
-    
     addr:=Long(hostEnt.h_addr_list)
     addr:=Long(addr)
 
@@ -562,67 +566,83 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
     sa.sin_port:=serverPort
     sa.sin_addr:=addr
 
-    s:=Socket(2,1,0)
-    IF (s>=0)
-   
-      IoctlSocket(s,FIONBIO,[1])
-      setSingleFDS(s)
+    try2:=0
+    REPEAT
+      try2++
+      s:=Socket(2,1,0)
+      IF (s>=0)
+        try:=0
+        REPEAT
+          IoctlSocket(s,FIONBIO,[1])
+          setSingleFDS(s)
+          tv.secs:=timeout
+          tv.micro:=0
 
-      Connect(s,sa,SIZEOF sockaddr_in)
-      
-      tv.secs:=timeout
-      tv.micro:=0
-      
-      n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
-      
-      IoctlSocket(s,FIONBIO,[0])
+          Connect(s,sa,SIZEOF sockaddr_in)
+          n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
+         
+          IF (n>0) THEN IoctlSocket(s,FIONBIO,[0])
+          try++
+          IF (n<=0)
+            CloseSocket(s)
+            s:=Socket(2,1,0)
+          ENDIF
+        UNTIL (try>=retry) OR (n>0)
 
-      IF n<=0
-        CloseSocket(s)
-        CloseLibrary(socketbase)
-        DisposeLink(buf)
-        END sa
-        RETURN FALSE
-      ENDIF
-
-      Send(s,requestdata,StrLen(requestdata),0)
-
-      i:=0
-
-      IF tempFile<>NIL
-        fh:=Open(tempFile,MODE_NEWFILE)
-        IF fh=0 
+        IF n<=0
           CloseSocket(s)
           CloseLibrary(socketbase)
           DisposeLink(buf)
           END sa
-          RETURN FALSE
+          RETURN -2
         ENDIF
+
+        n:=Send(s,requestdata,StrLen(requestdata),0)
+        IF n<StrLen(requestdata)
+          CloseSocket(s)
+          CloseLibrary(socketbase)
+          DisposeLink(buf)
+          END sa
+          RETURN -3
+        ENDIF
+
+        i:=0
+
+        IF tempFile<>NIL
+          fh:=Open(tempFile,MODE_NEWFILE)
+          IF fh=0 THEN RETURN -4
+        ENDIF
+           
+        n:=0         
+        REPEAT
+            IF (WaitSelect(s+1,fds,NIL,NIL,tv,NIL)=0)
+              i:=0
+              rescode:=-5
+            ELSE
+              i:=Recv(s,buf,BUFSIZE-1,0)
+              IF first 
+                first:=FALSE
+                StrCopy(result,buf,20)
+                p:=InStr(result,' ')
+                IF p>=0 THEN rescode:=Val(result+p+1)
+              ENDIF
+              IF (i>0) AND (fh<>0)
+                Write(fh,buf,i)
+              ENDIF
+            ENDIF
+        UNTIL i<=0
+        CloseSocket(s)
+        Close(fh)
       ENDIF
-              
-      REPEAT
-        i:=Recv(s,buf,BUFSIZE-1,0)
-        IF first 
-          StrCopy(result,buf,20)
-          first:=FALSE
-          p:=InStr(result,' ')
-          IF p>=0 THEN rescode:=Val(result+p+1)
-        ENDIF
-        IF (i>0) AND (fh<>0)
-          Write(fh,buf,i)
-        ENDIF
-      UNTIL i<=0
-      CloseSocket(s)
-      Close(fh)
-    ENDIF
+    UNTIL (rescode<>-5) OR (try2=retry)
     CloseLibrary(socketbase)
-    ENDIF
+  ENDIF
   DisposeLink(buf)
   END sa
-ENDPROC rescode=200
+ENDPROC rescode
 
 /* gets the json and puts it in OutTextBuffer */
-PROC getjson(timeout,page,count,bbsname,timeZone:PTR TO CHAR,tempFile:PTR TO CHAR)
+PROC getjson(timeout,retries,page,count,bbsname,timeZone:PTR TO CHAR,tempFile:PTR TO CHAR)
   DEF getcmd[255]:STRING
   DEF bbsProp[255]:STRING
   DEF start
@@ -641,7 +661,7 @@ PROC getjson(timeout,page,count,bbsname,timeZone:PTR TO CHAR,tempFile:PTR TO CHA
   ENDIF
   
   ->StringF(getcmd,'GET /api/GlobalLastCallers?start=\d&count=\d HTTP/1.0\b\nHost:\s\b\n\b\n',start,count,serverHost)
-  httpRequest(timeout,getcmd,tempFile)
+  httpRequest(timeout,retries,getcmd,tempFile)
 ENDPROC 
 
 PROC transmit(textLine:PTR TO CHAR)
@@ -720,6 +740,7 @@ PROC main() HANDLE
   DEF p1,p2
   DEF style=1
   DEF timeout=10
+  DEF retries=5
   DEF centreName=FALSE
   DEF bbsname[255]:STRING
   DEF node=-1
@@ -769,7 +790,7 @@ PROC main() HANDLE
     ENDIF
   ENDIF
 
-  configNames:=NEW configNames.stringlist(10)
+  configNames:=NEW configNames.stringlist(11)
   configNames.add('SERVERHOST')
   configNames.add('SERVERPORT')
   configNames.add('TEMPFILE')
@@ -777,10 +798,14 @@ PROC main() HANDLE
   configNames.add('SCREENCLEAR')
   configNames.add('STYLE')
   configNames.add('TIMEOUT')
+  configNames.add('RETRIES')
   configNames.add('CENTRENAME')
   configNames.add('TIMEZONE')
+  configNames.add('VIEWBBS')
   
-  configValues:=NEW configValues.stringlist(10)
+  configValues:=NEW configValues.stringlist(11)
+  configValues.add('')
+  configValues.add('')
   configValues.add('')
   configValues.add('')
   configValues.add('')
@@ -827,8 +852,10 @@ PROC main() HANDLE
     ENDIF
   ENDIF
   IF StrLen(configValues.item(6))>0 THEN timeout:=Val(configValues.item(6))
-  IF StrCmp(configValues.item(7),'1') THEN centreName:=TRUE
-  IF StrLen(configValues.item(8))>0 THEN StrCopy(timeZone,configValues.item(8))
+  IF StrLen(configValues.item(7))>0 THEN retries:=Val(configValues.item(7))
+  IF StrCmp(configValues.item(8),'1') THEN centreName:=TRUE
+  IF StrLen(configValues.item(9))>0 THEN StrCopy(timeZone,configValues.item(9))
+  IF StrLen(configValues.item(10))>0 THEN StrCopy(bbsname,configValues.item(10))
   
   IF (style<1) OR (style>4) THEN style:=1
   
@@ -840,7 +867,7 @@ PROC main() HANDLE
     ENDIF
   ENDIF
   
-  getjson(timeout,page,count,bbsname,timeZone,tempFile)
+  getjson(timeout,retries,page,count,bbsname,timeZone,tempFile)
   bufsize:=FileLength(tempFile)
   IF bufsize<1 THEN Raise(10)
   jsonBuffer:=New(bufsize)

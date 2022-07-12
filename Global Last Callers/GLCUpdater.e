@@ -1,12 +1,13 @@
+
 /*
 Global Last Callers Updater
 */
 OPT OSVERSION=37
 
   MODULE 'dos/dos','*jsonParser','*stringlist'
-  MODULE	'socket'
-  MODULE	'net/netdb'
-  MODULE	'net/in'
+  MODULE  'socket'
+  MODULE  'net/netdb'
+  MODULE  'net/in'
   MODULE  'devices/timer'
 
 CONST FIONBIO=$8004667e
@@ -27,7 +28,7 @@ PROC setSingleFDS(socketVal)
   fds[n]:=fds[n] OR (Shl(1,socketVal AND 31))
 ENDPROC
 
-PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
+PROC httpRequest(timeout,retry,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
  DEF i,p,s
   DEF sa=0:PTR TO sockaddr_in
   DEF addr: LONG
@@ -39,20 +40,25 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF rescode=0
   DEF n
   DEF tv:timeval
+  DEF try
+  DEF try2
 
-	buf:=String(BUFSIZE+4)
+  buf:=String(BUFSIZE+4)
   NEW sa
 
-	socketbase:=OpenLibrary('bsdsocket.library',2)
-	IF (socketbase)
-    SetErrnoPtr({errno},4)
+  socketbase:=OpenLibrary('bsdsocket.library',2)
+  IF (socketbase)
 
-    hostEnt:=GetHostByName(serverHost)
+    try:=0
+    REPEAT
+      hostEnt:=GetHostByName(serverHost)
+      try++
+    UNTIL (try>=retry) OR (hostEnt<>NIL)
     IF hostEnt=NIL
       CloseLibrary(socketbase)
       DisposeLink(buf)
       END sa
-      RETURN FALSE
+      RETURN -1
     ENDIF
     addr:=Long(hostEnt.h_addr_list)
     addr:=Long(addr)
@@ -62,58 +68,84 @@ PROC httpRequest(timeout,requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
     sa.sin_port:=serverPort
     sa.sin_addr:=addr
 
-    s:=Socket(2,1,0)
-    IF (s>=0)
-    
-        IoctlSocket(s,FIONBIO,[1])
-        setSingleFDS(s)
+    try2:=0
+    REPEAT
+      try2++
+      s:=Socket(2,1,0)
+      IF (s>=0)
+        try:=0
+        REPEAT
+          IoctlSocket(s,FIONBIO,[1])
+          setSingleFDS(s)
+          tv.secs:=timeout
+          tv.micro:=0
 
-        Connect(s,sa,SIZEOF sockaddr_in)
-        
-        tv.secs:=timeout
-        tv.micro:=0
-        
-        n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
-       
-        IoctlSocket(s,FIONBIO,[0])
+          Connect(s,sa,SIZEOF sockaddr_in)
+          n:=WaitSelect(s+1,NIL,fds,NIL,tv,NIL)
+         
+          IF (n>0) THEN IoctlSocket(s,FIONBIO,[0])
+          try++
+          IF (n<=0)
+            WriteF('connect \d: timeout\n',try)
+            CloseSocket(s)
+            s:=Socket(2,1,0)
+          ENDIF
+        UNTIL (try>=retry) OR (n>0)
 
         IF n<=0
-            CloseSocket(s)
-        CloseLibrary(socketbase)
-        DisposeLink(buf)
-        END sa
-        RETURN FALSE
+          WriteF('all retries failed\n')
+          CloseSocket(s)
+          CloseLibrary(socketbase)
+          DisposeLink(buf)
+          END sa
+          RETURN -2
         ENDIF
 
-        Send(s,requestdata,StrLen(requestdata),0)
+        n:=Send(s,requestdata,StrLen(requestdata),0)
+        IF n<StrLen(requestdata)
+          WriteF('send failed\n')
+          CloseSocket(s)
+          CloseLibrary(socketbase)
+          DisposeLink(buf)
+          END sa
+          RETURN -3
+        ENDIF
 
         i:=0
 
         IF tempFile<>NIL
           fh:=Open(tempFile,MODE_NEWFILE)
-          IF fh=0 THEN RETURN FALSE
+          IF fh=0 THEN RETURN -4
         ENDIF
-                
+           
+        n:=0         
         REPEAT
-            i:=Recv(s,buf,BUFSIZE-1,0)
-            IF first 
-              first:=FALSE
-              StrCopy(result,buf,20)
-              p:=InStr(result,' ')
-              IF p>=0 THEN rescode:=Val(result+p+1)
-            ENDIF
-            IF (i>0) AND (fh<>0)
-              Write(fh,buf,i)
+            IF (WaitSelect(s+1,fds,NIL,NIL,tv,NIL)=0)
+              i:=0
+              WriteF('receive \d: timeout\n',try2)
+              rescode:=-5
+            ELSE
+              i:=Recv(s,buf,BUFSIZE-1,0)
+              IF first 
+                first:=FALSE
+                StrCopy(result,buf,20)
+                p:=InStr(result,' ')
+                IF p>=0 THEN rescode:=Val(result+p+1)
+              ENDIF
+              IF (i>0) AND (fh<>0)
+                Write(fh,buf,i)
+              ENDIF
             ENDIF
         UNTIL i<=0
         CloseSocket(s)
         Close(fh)
-    ENDIF
+      ENDIF
+    UNTIL (rescode<>-5) OR (try2=retry)
     CloseLibrary(socketbase)
-	ENDIF
+  ENDIF
   DisposeLink(buf)
   END sa
-ENDPROC rescode=200
+ENDPROC rescode
 
 PROC replacestr(sourcestring,searchtext,replacetext)
   DEF newstring,tempstring,oldpos, pos,len
@@ -145,11 +177,23 @@ PROC replacestr(sourcestring,searchtext,replacetext)
 ENDPROC
 
 PROC cleanstr(sourcestring)
+  DEF testStr[1]:STRING
+  DEF newStr[10]:STRING
+  DEF i
   replacestr(sourcestring,'\\','\\\\')
   replacestr(sourcestring,'"','\\"')
+  StrCopy(testStr,'#')
+  FOR i:=128 TO 255
+    testStr[0]:=i
+    IF InStr(sourcestring,testStr)>=0
+      StringF(newStr,'\\u\h[4]',i)
+      replacestr(sourcestring,testStr,newStr)
+    ENDIF
+    
+  ENDFOR
 ENDPROC
 
-PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps,confNums:PTR TO LONG,confUploads:PTR TO LONG)
+PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps,confNums:PTR TO LONG,confUploads:PTR TO LONG,upFiles:PTR TO stringlist,downFiles:PTR TO stringlist)
   DEF senddata
   DEF linedata
   DEF res
@@ -157,9 +201,12 @@ PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO C
   DEF confUploadText[255]:STRING
   DEF tmpstr[20]:STRING
   DEF i
+  DEF filenames:PTR TO CHAR
+  DEF fnameslen1=0,fnameslen2=0
 
   cleanstr(userName)
   cleanstr(bbsName)
+  cleanstr(location)
 
   FOR i:=0 TO ListLen(confNums)-1
     IF confUploads[i]>0
@@ -181,15 +228,88 @@ PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO C
     ENDIF
   ENDFOR
 
-  linedata:=String(350+StrLen(userName)+StrLen(bbsName)+StrLen(dateOn)+StrLen(timeOn)+StrLen(timeOff)+StrLen(actions))
-  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps)
+  FOR i:=0 TO upFiles.count()-1
+    fnameslen1+=EstrLen(upFiles.item(i))+3
+  ENDFOR
+  IF fnameslen1>0
+    fnameslen1+=18
+  ELSE
+    fnameslen1:=20
+  ENDIF
+  
+  FOR i:=0 TO downFiles.count()-1
+    fnameslen2+=EstrLen(downFiles.item(i))+3
+  ENDFOR
+  IF fnameslen2>0
+    fnameslen2+=20
+  ELSE
+    fnameslen2:=22
+  ENDIF
+
+  filenames:=String(fnameslen1+fnameslen2)
+  IF upFiles.count()>0
+    StrAdd(filenames,',"uploadfiles": [')
+    FOR i:=0 TO upFiles.count()-1 
+      IF i<>0 THEN StrAdd(filenames,',')
+      StrAdd(filenames,'"')
+      StrAdd(filenames,upFiles.item(i))
+      StrAdd(filenames,'"')
+    ENDFOR
+    StrAdd(filenames,']')
+  ELSE
+    StrAdd(filenames,',"uploadfiles": null')
+  ENDIF
+
+  IF downFiles.count()>0
+    StrAdd(filenames,',"downloadfiles": [')
+    FOR i:=0 TO downFiles.count()-1 
+      IF i<>0 THEN StrAdd(filenames,',')
+      StrAdd(filenames,'"')
+      StrAdd(filenames,downFiles.item(i))
+      StrAdd(filenames,'"')
+    ENDFOR
+    StrAdd(filenames,']')
+  ELSE
+    StrAdd(filenames,',"downloadfiles": null')
+  ENDIF
+
+  ->{"Id":            7
+  ->1
+  ->,"Username": "   14
+  ->StrLen(userName)
+  ->","location": "  15
+  ->StrLen(location)+
+  ->","Bbsname": "   14
+  ->StrLen(bbsName)+
+  ->","Dateon": "    13
+  ->StrLen(dateOn)+
+  ->","TimeOn": "    13
+  ->StrLen(timeOn)+
+  ->","TimeOff": "   14
+  ->StrLen(timeOff)+
+  ->","Actions": "   14
+  ->StrLen(actions)+
+  ->","Upload":      12
+  ->StrLen(uploads)+
+  ->,"Download":     13
+  ->StrLen(downloads)+
+  ->,"topcps":       11
+  ->StrLen(topcps)
+  ->StrLen(filenames))
+  ->1
+  ->StrLen(confNumText)
+  ->StrLen(confUploadText)
+  ->}\b\n            3
+  
+  linedata:=String(7+14+15+14+13+13+14+14+12+13+11+20+1+3+StrLen(userName)+StrLen(location)+StrLen(bbsName)+StrLen(dateOn)+StrLen(timeOn)+StrLen(timeOff)+StrLen(actions)+StrLen(uploads)+StrLen(downloads)+StrLen(confNumText)+StrLen(confUploadText)+StrLen(filenames))
+  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d\s','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps,filenames)
   
   IF EstrLen(confNumText)>0
     StrAdd(linedata,',')
     StrAdd(linedata,confNumText)
     StrAdd(linedata,confUploadText)
   ENDIF
-    StrAdd(linedata,'}\b\n')
+  StrAdd(linedata,'}\b\n')
   
   senddata:=String(EstrLen(linedata)+500)
   IF StrLen(timeZone)>0
@@ -202,11 +322,15 @@ PROC postdata(timeout,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO C
   StrAdd(senddata,linedata)
 
   DisposeLink(linedata)
-
-  res:=httpRequest(timeout,senddata,NIL)
+  ->WriteF(senddata)
+  res:=httpRequest(timeout,retries,senddata,NIL)
+  IF (res<200) OR (res>299)
+    WriteF('rescode=\d\ndata=\s\n',res,senddata)
+  ENDIF
   
   DisposeLink(senddata)
-ENDPROC res
+  DisposeLink(filenames)
+ENDPROC (res>=200) AND (res<300)
 
 PROC processTransferLine(logLine:PTR TO CHAR)
   DEF p
@@ -278,10 +402,17 @@ PROC parseConfigFile(configFileName:PTR TO CHAR, configNames:PTR TO stringlist, 
   ENDIF
 ENDPROC
 
+PROC existsInStringList(list:PTR TO stringlist, val:PTR TO CHAR)
+  DEF i
+  FOR i:=0 TO list.count()-1
+    IF StrCmp(list.item(i),val) THEN RETURN TRUE
+  ENDFOR
+ENDPROC FALSE
+
 PROC main()
   DEF logFname[255]:STRING
   DEF timeZone[255]:STRING
-  DEF ignoreLocal=FALSE,ignoreSysop=FALSE,ignoreSysopUser=FALSE,processAll=FALSE,lastChar
+  DEF ignoreLocal=FALSE,ignoreSysop=FALSE,ignoreSysopUser=FALSE,processAll=FALSE
   DEF fh
   DEF offset
   DEF callStartFound=FALSE
@@ -314,8 +445,12 @@ PROC main()
   DEF userNum
   DEF skip,kb,cps
   DEF timeout=10
+  DEF retries=5
   DEF configNames:PTR TO stringlist
   DEF configValues:PTR TO stringlist 
+  
+  DEF upFiles:PTR TO stringlist
+  DEF downFiles:PTR TO stringlist
   
   DEF confNums:PTR TO LONG
   DEF confUploads:PTR TO LONG
@@ -325,7 +460,7 @@ PROC main()
 
   DEF callStartPosition,probableStart,foundEnd
   DEF fileLength
-  DEF p,p2,tmp,i
+  DEF p,p2,tmp,i,tmp2
 
   DEF myargs:PTR TO LONG,rdargs
   
@@ -364,13 +499,15 @@ PROC main()
   
   fds:=NEW [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:LONG
 
-  configNames:=NEW configNames.stringlist(4)
+  configNames:=NEW configNames.stringlist(5)
   configNames.add('SERVERHOST')
   configNames.add('SERVERPORT')
   configNames.add('TIMEOUT')
+  configNames.add('RETRIES')
   configNames.add('TIMEZONE')
   
-  configValues:=NEW configValues.stringlist(4)
+  configValues:=NEW configValues.stringlist(5)
+  configValues.add('')
   configValues.add('')
   configValues.add('')
   configValues.add('')
@@ -381,10 +518,14 @@ PROC main()
   IF StrLen(configValues.item(0))>0 THEN StrCopy(serverHost,configValues.item(0))
   IF StrLen(configValues.item(1))>0 THEN serverPort:=Val(configValues.item(1))
   IF StrLen(configValues.item(2))>0 THEN timeout:=Val(configValues.item(2))
-  IF StrLen(configValues.item(3))>0 THEN StrCopy(timeZone,configValues.item(3))
+  IF StrLen(configValues.item(3))>0 THEN retries:=Val(configValues.item(3))
+  IF StrLen(configValues.item(4))>0 THEN StrCopy(timeZone,configValues.item(4))
 
   confNums:=List(100)
   confUploads:=List(100)
+  upFiles:=NEW upFiles.stringlist(100)
+  downFiles:=NEW downFiles.stringlist(100)
+  
   currentConf:=0
 
   IF processAll=FALSE
@@ -425,6 +566,8 @@ PROC main()
     REPEAT
       SetList(confNums,0)
       SetList(confUploads,0)
+    upFiles.clear()
+    downFiles.clear()
 
       ReadStr(fh,logLine)
     
@@ -537,7 +680,26 @@ PROC main()
           downloads:=downloads+kb
           downloadSuccess:=TRUE
         ENDIF
+
+    IF (tmp:=InStr(logLine,'\tUpload moved to ')>=0)
+      IF (InStr(logLine,'LCFILES/')=-1) AND (InStr(logLine,'PARTUPLOAD/')=-1) AND (InStr(logLine,'HOLD/')=-1)
+        tmp2:=FilePart(logLine+tmp+17)
+        StrCopy(tempStr,tmp2)
+        UpperStr(tempStr)
+        cleanstr(tempStr)
+        IF existsInStringList(upFiles,tmp2)=FALSE THEN upFiles.add(tempStr)
+      ENDIF
+    ENDIF
         
+    IF (tmp:=InStr(logLine,'\tDownloading ')>=0)
+      StrCopy(tempStr,FilePart(logLine+tmp+14))
+      tmp:=InStr(tempStr,' ')
+      SetStr(tempStr,tmp)
+      UpperStr(tempStr)
+      cleanstr(tempStr)
+      IF existsInStringList(downFiles,tempStr)=FALSE THEN downFiles.add(tempStr)
+    ENDIF
+
         IF InStr(logLine,'Upload Failed..')>=0 THEN uploadFail:=TRUE
         IF InStr(logLine,'Download Failed..')>=0 THEN downloadFail:=TRUE
         IF InStr(logLine,'Operator Paged At ')>=0 THEN opPaged:=TRUE
@@ -571,7 +733,7 @@ PROC main()
 
       IF skip=FALSE
         WriteF('Processing call on \s at \s from \s[\d]....',dateOn,timeOn,userName,userNum)
-        IF postdata(timeout,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps,confNums,confUploads)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
+        IF postdata(timeout,retries,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps,confNums,confUploads,upFiles,downFiles)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
       ELSE  
         WriteF('Skipping call on \s at \s from \s[\d]\n',dateOn,timeOn,userName,userNum)
       ENDIF
@@ -583,7 +745,3 @@ PROC main()
   END fds[32]
   
 ENDPROC
-
-
-errno: 
-	LONG 0,0

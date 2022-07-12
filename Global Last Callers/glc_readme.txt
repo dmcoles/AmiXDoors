@@ -59,6 +59,8 @@ STYLE=4 - Choose between 4 styles (1-4) (two different headers and two different
 
 CENTRENAME=1 - Turn on the option to display the user names centred.
 
+VIEWBBS=bbsname - If this is not present then all BBS entries will be shown, if included then only those matching the name specified will be shown.
+
 TimeZone Information
 
 This version of global last callers handles timezones and is able to record and display the last callers list
