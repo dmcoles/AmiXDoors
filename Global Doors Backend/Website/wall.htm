@@ -22,6 +22,8 @@
 <option selected="selected" value='UTC'>Coordinated Universal Time</option>
 <option value='GMT Standard Time'>GMT Standard Time</option>
 <option value='W. Europe Standard Time'>W. Europe Standard Time</option>
+</select> <select onchange="getCallItems(selectedBBSName())" name='bbsname' id='bbsname'>
+<option value=''>All bbss</option>
 </select>
 </font></div></pre>
 <pre style="font-family: 'TopazNew', Fallback, monospace;"><div id="callsMain" style="display: none"><div style="float: left">  <font color="#ff00ff">    ___   ___________________________________   ___   __________________</font>
@@ -94,8 +96,6 @@
 <option value='23'>All-time Top BBS Downloads</option>
 <option value='24'>All-time Top User CPS</option>
 <option value='25'>All-time Top BBS CPS</option>
-</select><select onchange="getCallItems(selectedBBSName())" name='bbsname' id='bbsname'>
-<option value=''>All bbss</option>
 </select><font color="#0000ff">
 
     .- -- -------÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">L</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">S</font>÷÷--÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">S</font>÷-------- -- -.
@@ -851,6 +851,8 @@
         element.style.display = "none"
         element = document.getElementById("tzone")
         element.style.display = "none"
+        element = document.getElementById("bbsname")
+        element.style.display = "none"
       }
       
       function showCallItems() {
@@ -863,6 +865,8 @@
         element = document.getElementById("wallMain")
         element.style.display = "none"
         element = document.getElementById("tzone")
+        element.style.display = ""
+        element = document.getElementById("bbsname")
         element.style.display = ""
       }
       
