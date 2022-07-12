@@ -2,7 +2,6 @@
 <html>
 <head>
  <meta http-equiv="Content-Type" content="text/html;charset=utf-8"> 
-
  <style type="text/css"></style>
 <style>@font-face {
   font-family: 'TopazNew';
@@ -16,6 +15,15 @@
 </style>
 </head>
 <body vlink="#00eeee" text="#ffffff" link="#00ffff" bgcolor="#000000">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
+<pre style="font-family: 'TopazNew', Fallback, monospace;">
+<div id="hdr" <font color="#ff00ff"> SCENEWALL.BBS.IO <button onclick="showWallItems()">Wall</button> <button onclick="showCallItems()">Callers List</button> <select onchange="showCallItems()" name='Timezone' id='tzone'>
+<option value=''>No Timezone Adjustment</option>
+<option selected="selected" value='UTC'>Coordinated Universal Time</option>
+<option value='GMT Standard Time'>GMT Standard Time</option>
+<option value='W. Europe Standard Time'>W. Europe Standard Time</option>
+</select>
+</font></div></pre>
 <pre style="font-family: 'TopazNew', Fallback, monospace;"><div id="callsMain" style="display: none"><div style="float: left">  <font color="#ff00ff">    ___   ___________________________________   ___   __________________</font>
   <font color="#ff00ff">   /  /\ / _   /  ___/__   __/  ___/ _   /  /\ /  /\ /  ___/ _  _/  ___/\</font>
   <font color="#ff00ff">  /  /_//     /\__  /\_/  /\/  /\_/     /  /_//  /_//  ___/     )\__  /\/</font>
@@ -31,7 +39,7 @@
   <font color="#0000ff">-------------------------------------------------------------------------------</font>
 <div id="status1body"></div><div id="status2body"></div><div id="recordsbody"></div>  <font color="#0000ff">-------------------------------------------------------------------------------</font>
 <div id="callsmobileentry">
-<input style="margin:0 10px 0 0" onclick="prevpage()" type="button" value="Page back"><span /><input style="margin:0 10px 0 0" onclick="nextpage()" type="button" value="Page forward">
+<input style="margin:0 10px 0 0" onclick="callsprevpage()" type="button" value="Page back"><span /><input style="margin:0 10px 0 0" onclick="callsnextpage()" type="button" value="Page forward">
 </div></div></div><div id="wallMain" style=""><div style="float: left"><div ><font color="#ffff00">         __</font>
 <font color="#0000ff">.- - ---</font><font color="#ffff00">_\/_</font><font color="#0000ff">--÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">T</font>÷<font color="#00ff00">H</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">M</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">N</font>÷<font color="#00ff00">U</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">R</font>÷--÷<font color="#00ff00">W</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷-- --- ----.</font>
 <font color="#0000ff">!</font><font color="#00ffff">cOMMENt</font><font color="#ffff00">\/\/</font>                                                        <font color="#00ffff">hANDLE</font><font color="#0000ff">¡</font><font color="#00ffff">bBS</font><font color="#0000ff">!</font>
@@ -52,7 +60,7 @@
   <option value="7">White</option>
 </select>
 </div>
-<input style="margin:0 10px 0 0" onclick="prevpage()" type="button" value="Page back"><span/><input style="margin:0 10px 0 0" onclick="nextpage()" type="button" value="Page forward"><input style="margin:0 10px 0 0" onclick="showHideKey()" type="button" value="Show/Hide BBS Key"><input id="mobileSubmit" onclick="sendmobilemsg()" type="button" value="Post comment">
+<input style="margin:0 10px 0 0" onclick="wallprevpage()" type="button" value="Page back"><span/><input style="margin:0 10px 0 0" onclick="wallnextpage()" type="button" value="Page forward"><input style="margin:0 10px 0 0" onclick="showHideKey()" type="button" value="Show/Hide BBS Key"><input id="mobileSubmit" onclick="sendmobilemsg()" type="button" value="Post comment">
 </div>
 
 <div style="display: none" id="selectColour">
@@ -61,12 +69,7 @@
 <font color="#0000ff">`----------- -- ----- - --    - -- --  ---- - -----        - -- -------- -- --'</font>
 </div>
 </div></div><div style="margin-left: 75em; font: 10px TopazNew" ><font color="#ffffff"> 
-<button onclick="showWallItems()">Wall</button><button onclick="showCallItems()">Callers List</button><select onchange="showCallItems()" name='Timezone' id='tzone'>
-<option value=''>No Timezone Adjustment</option>
-<option selected="selected" value='UTC'>Coordinated Universal Time</option>
-<option value='GMT Standard Time'>GMT Standard Time</option>
-<option value='W. Europe Standard Time'>W. Europe Standard Time</option>
-</select><select onchange="getCallStats()" name='Statistics' id='stattype'>
+<div style="font-family: 'TopazNew', Fallback, monospace;" id = "callstats">    <select onchange="getCallStats()" name='Statistics' id='stattype'>
 <option value='0'>Weekly Top Uploaders</option>
 <option value='1'>Monthly Top Uploaders</option>
 <option value='2'>Weekly Top BBS Uploads</option>
@@ -93,9 +96,7 @@
 <option value='25'>All-time Top BBS CPS</option>
 </select><select onchange="getCallItems(selectedBBSName())" name='bbsname' id='bbsname'>
 <option value=''>All bbss</option>
-</select>
-</select>
-<div style="font-family: 'TopazNew', Fallback, monospace;" id = "callstats"><font color="#0000ff">
+</select><font color="#0000ff">
 
     .- -- -------÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">L</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">S</font>÷÷--÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">S</font>÷-------- -- -.
     !       ¡                                             ¦             <font color="#00ff00"><span id="dayText">         </span></font> !
@@ -842,23 +843,29 @@
       function showWallItems() {
         page=1
         showingWall = true        
+        setCookie('start','wall')
         getWallItems()
         element = document.getElementById("wallMain")
         element.style.display = ""
         element = document.getElementById("callsMain")
         element.style.display = "none"
+        element = document.getElementById("tzone")
+        element.style.display = "none"
       }
       
       function showCallItems() {
         page=1
+        setCookie('start','call')
         showingWall = false
         getCallItems(selectedBBSName())
         element = document.getElementById("callsMain")
         element.style.display = ""
         element = document.getElementById("wallMain")
         element.style.display = "none"
+        element = document.getElementById("tzone")
+        element.style.display = ""
       }
-
+      
        document.getElementById("callsbody").innerHTML = '';
        document.getElementById("wallbody").innerHTML = '';
 
@@ -939,8 +946,19 @@
        
       var output = '';
 
-      getCallItems(selectedBBSName())
-      showWallItems()
+      const urlParams = new URLSearchParams(location.search);
+      if (urlParams.has('wall')) {
+        showWallItems()
+      } else if (urlParams.has('call')) {
+        showCallItems()
+      } else {     
+        if (getCookie('start')=='call') {
+          showCallItems()
+        } else {
+          showWallItems()
+        }
+      }
+      
       getBBSad()
       getCallStats()
 	  getDailyDiz()
