@@ -22,8 +22,8 @@
 <option selected="selected" value='UTC'>Coordinated Universal Time</option>
 <option value='GMT Standard Time'>GMT Standard Time</option>
 <option value='W. Europe Standard Time'>W. Europe Standard Time</option>
-</select> <select onchange="getCallItems(selectedBBSName())" name='bbsname' id='bbsname'>
-<option value=''>All bbss</option>
+</select> <select onchange="bbsnamesChange()" name='bbsname' id='bbsname'>
+<option value=''>All BBS's</option>
 </select>
 </font></div></pre>
 <pre style="font-family: 'TopazNew', Fallback, monospace;"><div id="callsMain" style="display: none"><div style="float: left">  <font color="#ff00ff">    ___   ___________________________________   ___   __________________</font>
@@ -70,6 +70,9 @@
 <font color="#0000ff">¦    <font color="#ffffff">[W]HITE </font>- <font color="#ff0000">[R]ED </font>- <font color="#ffff00">[Y]ELLOW </font>- <font color="#0000ff">[D]ARKBLUE </font>- <font color="#ff00ff">[P]URPLE </font>- <font color="#00ffff">[C]YAN </font>- <font color="#00ff00">[G]REEN </font>   ¦</font>
 <font color="#0000ff">`----------- -- ----- - --    - -- --  ---- - -----        - -- -------- -- --'</font>
 </div>
+</div></div><div id="filesMain" style="display: none"><div style="float: left"><font color="#00ff00">Last 07 Days Files in </font><font color="#ffff00">&gt;&gt; <span id="filebbsnames">All BBS's</span> &lt;&lt; </font><font color="#0000ff">: </font><font color="#ffffff">(</font><font color="#ff00ff">Files</font><font color="#ffff00">: </font><font color="#00ffff"><span id="filescount">xx</span></font><font color="#ffffff">)</font>
+
+<font color="#ffffff"><div id="fileslist"></div></font><p style="background-color:blue"><font color="#ffff00">  QuickNew V2.2 by Calypso/GOD & REbEL/QTX </font><font color="#00ffff">Date : <span id="filesdate">xx-xx-xx</span>   </font><font color="#ff00ff">Time : <span id="filestime">xx:xx:xx</span></font>  </p>
 </div></div><div style="margin-left: 75em; font: 10px TopazNew" ><font color="#ffffff"> 
 <div style="font-family: 'TopazNew', Fallback, monospace;" id = "callstats">    <select onchange="getCallStats()" name='Statistics' id='stattype'>
 <option value='0'>Weekly Top Uploaders</option>
@@ -175,6 +178,28 @@
 	   function selectedBBSName() {   
 	     return encodeURIComponent(document.getElementById("bbsname").value);
 	   }
+
+     function getFileItems(bbsname) {
+       var d = new Date()
+       element = document.getElementById("filesdate")
+       element.innerHTML=("0" + d.getUTCDate()).slice(-2)+"-"+("0" + (d.getUTCMonth()+1)).slice(-2)+"-"+d.getUTCFullYear().toString()
+       element = document.getElementById("filestime")
+       element.innerHTML=("0" + d.getUTCHours()).slice(-2)+":"+("0" + d.getUTCMinutes()).slice(-2)+":"+("0" + d.getUTCSeconds()).slice(-2)
+    	if (bbsname.length>0) {      
+         document.getElementById("filebbsnames").innerHTML=document.getElementById("bbsname").value
+         requestfiles.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/recentfiles?bbsname='+bbsname, true);
+      } else {
+         document.getElementById("filebbsnames").innerHTML="All BBS's"
+         requestfiles.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/recentfiles', true);
+      }
+       requestfiles.send();
+      }
+      
+
+      function bbsnamesChange() {
+        if (showingCalls) getCallItems(selectedBBSName());
+        if (showingFiles) getFileItems(selectedBBSName());
+      }
 	   
        function getCallItems(bbsname) {
         var tz=document.getElementById("tzone").value
@@ -389,7 +414,7 @@
        }
 
 	   	function bbsNamesRead() {
-		  var list = "<option value=''>All bbs</option>"
+		  var list = "<option value=''>All BBS's</option>"
 
 		  if (requestBBSnames.status >= 200 && requestBBSnames.status < 400) {
 			var data = JSON.parse(this.response);
@@ -400,6 +425,29 @@
 
 		  document.getElementById("bbsname").innerHTML=list
 		}
+
+	   	function fileitemsRead() {
+		  var list = " "
+
+		  if (requestfiles.status >= 200 && requestfiles.status < 400) {
+        var data = JSON.parse(this.response);
+        var l = 0
+        var n = 0
+        data.forEach(function (filename) {
+          n++
+          l = l+filename.length+1
+          if (l>79)
+          {
+            list = list + String.fromCharCode(13)+" ";
+            l = filename.length+1
+          }
+          list = list + filename+" "
+        })
+		  }
+
+       document.getElementById("filescount").innerHTML=n.toString()
+       document.getElementById("fileslist").innerHTML=list.slice(0,-2)
+      }
 
        function callitemsRead() {
         if (requestcalls.status >= 200 && requestcalls.status < 400) {
@@ -843,11 +891,15 @@
       function showWallItems() {
         page=1
         showingWall = true        
+        showingCalls = false
+        showingFiles = false
         setCookie('start','wall')
         getWallItems()
         element = document.getElementById("wallMain")
         element.style.display = ""
         element = document.getElementById("callsMain")
+        element.style.display = "none"
+        element = document.getElementById("filesMain")
         element.style.display = "none"
         element = document.getElementById("tzone")
         element.style.display = "none"
@@ -859,13 +911,39 @@
         page=1
         setCookie('start','call')
         showingWall = false
+        showingCalls = true
+        showingFiles = false
+
         getCallItems(selectedBBSName())
         element = document.getElementById("callsMain")
         element.style.display = ""
         element = document.getElementById("wallMain")
         element.style.display = "none"
+        element = document.getElementById("filesMain")
+        element.style.display = "none"
         element = document.getElementById("tzone")
         element.style.display = ""
+        element = document.getElementById("bbsname")
+        element.style.display = ""
+      }
+
+      function showFileItems() {
+        page=1
+        showingWall = false
+        showingCalls = false
+        showingFiles = true
+        setCookie('start','file')
+        getFileItems(selectedBBSName())
+        element = document.getElementById("filesMain")
+        element.style.display = ""
+        element = document.getElementById("callsMain")
+        element.style.display = "none"
+        element = document.getElementById("wallMain")
+        element.style.display = "none"
+        element = document.getElementById("tzone")
+        element.style.display = "none"
+        element = document.getElementById("bbsname")
+        element.style.display = "none"
         element = document.getElementById("bbsname")
         element.style.display = ""
       }
@@ -882,6 +960,9 @@
        
        var requeststats = new XMLHttpRequest();
          requeststats.onload = statsitemsRead
+
+       var requestfiles = new XMLHttpRequest();
+         requestfiles.onload = fileitemsRead
 
        var requestcalls = new XMLHttpRequest();
          requestcalls.onload = callitemsRead
@@ -902,6 +983,8 @@
 
        var page = 1
        var showingWall = true
+       var showingFiles = false
+       var showingCalls = false
 
        var request2 = new XMLHttpRequest();
        request2.onload = function () {
@@ -955,11 +1038,18 @@
         showWallItems()
       } else if (urlParams.has('call')) {
         showCallItems()
+      } else if (urlParams.has('file')) {
+        showFileItems()       
       } else {     
-        if (getCookie('start')=='call') {
+        var st = getCookie('start')
+        if (st=='call') {
           showCallItems()
-        } else {
+        } else if (st=='wall') {
           showWallItems()
+        } else if (st=='file') {
+          showFileItems()
+        } else {
+          showCallItems()
         }
       }
       
