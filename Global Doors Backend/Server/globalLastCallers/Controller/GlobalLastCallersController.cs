@@ -740,6 +740,42 @@ namespace GlobalLastCallers.Controller
             return Ok(bbsList);
         }
 
+        [HttpGet]
+        [Route("recentfiles")]
+        [ResponseType(typeof(List<string>))]
+        // GET: api/GlobalLastCallers/recentfiles
+        public IHttpActionResult GetRecentFiles([FromUri] bool months=false, [FromUri] int offset = 0, [FromUri] string bbsname = null)
+        {
+            List<string> recentFiles = new List<string>();
+
+            SqlCommand sqlCmd;
+
+            string bbsfilter = "";
+            if (bbsname!=null) bbsfilter = " and bbsname = '" + bbsname + "'";
+
+            if (!months)
+                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and(dateadd(wk, -" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1"+bbsfilter+" order by cuf.id", sqlConn);
+            else
+                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1"+bbsfilter+" order by cuf.id", sqlConn);
+
+
+            if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
+            SqlDataReader sqlData = sqlCmd.ExecuteReader();
+            try
+            {
+                while (sqlData.Read())
+                {
+                    if (recentFiles.IndexOf(sqlData.GetString(0))==-1) recentFiles.Add(sqlData.GetString(0));
+                }
+            }
+            finally
+            {
+                sqlData.Close();
+                sqlData.Dispose();
+                sqlCmd.Dispose();
+            }
+            return Ok(recentFiles);
+        }
         protected override void Dispose(bool disposing)
         {
             if (disposing)
