@@ -19,7 +19,7 @@ namespace GlobalLastCallers.Controller
         public enum StatType
         {
             weektopUploads, monthtopUploads, weektopBBSuploads, monthtopBBSuploads, weektopCallers, monthtopCallers, weektopBBSCalls, monthtopBBSCalls, weektopdownloads, monthtopdownloads, weektopBBSdownloads, monthtopBBSdownloads, weektopUserCps, monthtopUserCps, weektopBBSCps, monthtopBBSCps, weektopUploadsAmigaOnly, monthtopUploadsAmigaOnly,
-            alltimeTopUploaders, alltimeTopBBSUploads, alltimeTopCallers, alltimeTopBBSCalls, alltimeTopDownloaders, alltimeTopBBSDownloads, alltimeTopUserCps, alltimeTopBBSCps, weektopBBSuploadsAmigaOnly, monthtopBBSuploadsAmigaOnly
+            alltimeTopUploaders, alltimeTopBBSUploads, alltimeTopCallers, alltimeTopBBSCalls, alltimeTopDownloaders, alltimeTopBBSDownloads, alltimeTopUserCps, alltimeTopBBSCps, weektopBBSuploadsAmigaOnly, monthtopBBSuploadsAmigaOnly, weektopFileDownloads, monthtopFileDownloads, alltimeFileDownloads
         };
 
         SqlConnection sqlConn = new SqlConnection(ConfigurationManager.ConnectionStrings["LastCallersDB"].ConnectionString + "; Connection Timeout = 60");
@@ -268,6 +268,27 @@ namespace GlobalLastCallers.Controller
                         sqlCmd3 = new SqlCommand("select distinct bbs.bbsname from lastcallers,confuploads,bbs where confuploads.callerid=lastcallers.id and bbs.bbsname=lastcallers.bbsname and confuploads.confid=bbs.amigaconfid and convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 and confuploads.upload > 0", sqlConn);
                         break;
                     }
+                case StatType.weektopFileDownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " filename,convert(bigint,count(*)) from lastcallers inner join calldownloadfiles cdf on cdf.callerid=lastcallers.id where convert(date,dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1 group by filename order by count(*) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getWeekDaysSql(offset), sqlConn);
+                        sqlCmd3 = new SqlCommand("select distinct bbsname from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and (dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1", sqlConn);
+                        break;
+                    }
+                case StatType.monthtopFileDownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " filename,convert(bigint,count(*)) from lastcallers inner join calldownloadfiles cdf on cdf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1 group by filename order by count(*) desc", sqlConn);
+                        sqlCmd2 = new SqlCommand(getMonthDaysSql(offset), sqlConn);
+                        sqlCmd3 = new SqlCommand("select distinct bbsname from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1", sqlConn);
+                        break;
+                    }
+                case StatType.alltimeFileDownloads:
+                    {
+                        sqlCmd = new SqlCommand("select top " + count.ToString() + " filename,convert(bigint,count(*)) from lastcallers  inner join calldownloadfiles cdf on cdf.callerid=lastcallers.id  group by filename order by count(*) desc", sqlConn);
+                        sqlCmd3 = new SqlCommand("select distinct bbsname from lastcallers", sqlConn);
+                        break;
+                    }
+
             }
             if (sqlCmd != null)
             {
@@ -744,19 +765,19 @@ namespace GlobalLastCallers.Controller
         [Route("recentfiles")]
         [ResponseType(typeof(List<string>))]
         // GET: api/GlobalLastCallers/recentfiles
-        public IHttpActionResult GetRecentFiles([FromUri] bool months=false, [FromUri] int offset = 0, [FromUri] string bbsname = null)
+        public IHttpActionResult GetRecentFiles([FromUri] bool months = false, [FromUri] int offset = 0, [FromUri] string bbsname = null)
         {
             List<string> recentFiles = new List<string>();
 
             SqlCommand sqlCmd;
 
             string bbsfilter = "";
-            if (bbsname!=null) bbsfilter = " and bbsname = '" + bbsname + "'";
+            if (bbsname != null) bbsfilter = " and bbsname = '" + bbsname + "'";
 
             if (!months)
-                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and(dateadd(wk, -" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1"+bbsfilter+" order by cuf.id", sqlConn);
+                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and(dateadd(wk, -" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1" + bbsfilter + " order by cuf.id", sqlConn);
             else
-                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1"+bbsfilter+" order by cuf.id", sqlConn);
+                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1" + bbsfilter + " order by cuf.id", sqlConn);
 
 
             if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
@@ -765,7 +786,7 @@ namespace GlobalLastCallers.Controller
             {
                 while (sqlData.Read())
                 {
-                    if (recentFiles.IndexOf(sqlData.GetString(0))==-1) recentFiles.Add(sqlData.GetString(0));
+                    if (recentFiles.IndexOf(sqlData.GetString(0)) == -1) recentFiles.Add(sqlData.GetString(0));
                 }
             }
             finally
@@ -776,6 +797,38 @@ namespace GlobalLastCallers.Controller
             }
             return Ok(recentFiles);
         }
+
+        [HttpGet]
+        [Route("fileinfo")]
+        [ResponseType(typeof(List<string>))]
+        // GET: api/GlobalLastCallers/fileinfo
+        public IHttpActionResult fileInfo([FromUri] string filename)
+        {
+            List<string> bbslist = new List<string>();
+
+            SqlCommand sqlCmd;
+            sqlCmd = new SqlCommand("select bbsname from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where filename = @filename", sqlConn);
+            sqlCmd.Parameters.Add("filename", SqlDbType.VarChar);
+            sqlCmd.Parameters["filename"].Value = filename;
+
+            if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
+            SqlDataReader sqlData = sqlCmd.ExecuteReader();
+            try
+            {
+                while (sqlData.Read())
+                {
+                    if (bbslist.IndexOf(sqlData.GetString(0)) == -1) bbslist.Add(sqlData.GetString(0));
+                }
+            }
+            finally
+            {
+                sqlData.Close();
+                sqlData.Dispose();
+                sqlCmd.Dispose();
+            }
+            return Ok(bbslist);
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
