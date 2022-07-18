@@ -99,6 +99,9 @@
 <option value='23'>All-time Top BBS Downloads</option>
 <option value='24'>All-time Top User CPS</option>
 <option value='25'>All-time Top BBS CPS</option>
+<option value='28'>Weekly Top Downloads</option>
+<option value='29'>Monthly Top Downloads</option>
+<option value='30'>All-time Top Downloads</option>
 </select><font color="#0000ff">
 
     .- -- -------÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">L</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">S</font>÷÷--÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">S</font>÷-------- -- -.
@@ -399,6 +402,11 @@
 			
               document.getElementById('amountTxt').innerHTML="CPS        "
               break;
+            case 28:
+            case 29:
+            case 30:
+							document.getElementById('amountTxt').innerHTML="Downloads  "
+              break;						
           }
           
           document.getElementById('statshdr').innerHTML=text
@@ -446,7 +454,7 @@
 		  }
 
        document.getElementById("filescount").innerHTML=n.toString()
-       document.getElementById("fileslist").innerHTML=list.slice(0,-2)
+       document.getElementById("fileslist").innerHTML=list
       }
 
        function callitemsRead() {
