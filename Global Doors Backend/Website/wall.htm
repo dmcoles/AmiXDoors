@@ -70,7 +70,12 @@
 <font color="#0000ff">¦    <font color="#ffffff">[W]HITE </font>- <font color="#ff0000">[R]ED </font>- <font color="#ffff00">[Y]ELLOW </font>- <font color="#0000ff">[D]ARKBLUE </font>- <font color="#ff00ff">[P]URPLE </font>- <font color="#00ffff">[C]YAN </font>- <font color="#00ff00">[G]REEN </font>   ¦</font>
 <font color="#0000ff">`----------- -- ----- - --    - -- --  ---- - -----        - -- -------- -- --'</font>
 </div>
-</div></div><div id="filesMain" style="display: none"><div style="float: left"><font color="#00ff00">Last 07 Days Files in </font><font color="#ffff00">&gt;&gt; <span id="filebbsnames">All BBS's</span> &lt;&lt; </font><font color="#0000ff">: </font><font color="#ffffff">(</font><font color="#ff00ff">Files</font><font color="#ffff00">: </font><font color="#00ffff"><span id="filescount">xx</span></font><font color="#ffffff">)</font>
+</div></div><div id="fileDetails" style="display: none"><div style="float: left"><font color="#00ff00">Filename: <font color="#ffff00"><span id="fileDetailsFname"></span></font>
+
+Uploaded To:
+
+<div id="filesuploadedto"></div></font>
+<font color="#ffffff">(Dates/times are reliant on system clock for each bbs and may not be 100% accurate)</font></div></div><div id="filesMain" style="display: none"><div style="float: left"><font color="#00ff00">Last 07 Days Files in </font><font color="#ffff00">&gt;&gt; <span id="filebbsnames">All BBS's</span> &lt;&lt; </font><font color="#0000ff">: </font><font color="#ffffff">(</font><font color="#ff00ff">Files</font><font color="#ffff00">: </font><font color="#00ffff"><span id="filescount">xx</span></font><font color="#ffffff">)</font>
 
 <font color="#ffffff"><div id="fileslist"></div></font><p style="background-color:blue"><font color="#ffff00">  QuickNew V2.2 by Calypso/GOD & REbEL/QTX </font><font color="#00ffff">Date : <span id="filesdate">xx-xx-xx</span>   </font><font color="#ff00ff">Time : <span id="filestime">xx:xx:xx</span></font>  </p>
 </div></div><div style="margin-left: 75em; font: 10px TopazNew" ><font color="#ffffff"> 
@@ -99,9 +104,9 @@
 <option value='23'>All-time Top BBS Downloads</option>
 <option value='24'>All-time Top User CPS</option>
 <option value='25'>All-time Top BBS CPS</option>
-<option value='28'>Weekly Top Downloads</option>
-<option value='29'>Monthly Top Downloads</option>
-<option value='30'>All-time Top Downloads</option>
+<option value='28'>Weekly Top Downloaded Files</option>
+<option value='29'>Monthly Top Downloaded Files</option>
+<option value='30'>All-time Top Downloaded Files</option>
 </select><font color="#0000ff">
 
     .- -- -------÷<font color="#00ff00">G</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">O</font>÷<font color="#00ff00">B</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷--÷<font color="#00ff00">L</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">C</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">L</font>÷<font color="#00ff00">E</font>÷<font color="#00ff00">R</font>÷<font color="#00ff00">S</font>÷÷--÷<font color="#00ff00">S</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">A</font>÷<font color="#00ff00">T</font>÷<font color="#00ff00">S</font>÷-------- -- -.
@@ -449,7 +454,7 @@
             list = list + String.fromCharCode(13)+" ";
             l = filename.length+1
           }
-          list = list + filename+" "
+          list = list + '<a onclick="showFileDetails(this.text)">'+filename+'</a> '
         })
 		  }
 
@@ -791,6 +796,25 @@
          return value
       }
 
+			function filedetailsRead() {
+        if (requestfiledetails.status >= 200 && requestfiledetails.status < 400) {
+          var data = JSON.parse(this.response);
+
+            var list = ""
+						var n = 1
+						data.forEach(function (fileItem) {
+						  var bbsdate = fileItem.calldate
+							bbsdate = bbsdate.substring(0,bbsdate.length - 7)
+							list = list + "          <font color='#00ff00'>"+n+")</font> <font color='#ffff00'>"+clean2(fileItem.bbsname)+" by "+clean2(fileItem.calluser)+" ("+bbsdate+")</font>"+ String.fromCharCode(13)
+							n++
+						})
+
+						var element = document.getElementById("filesuploadedto").innerHTML = list
+					}
+					
+					
+			}
+
        function wallitemsRead() {
         if (requestwall.status >= 200 && requestwall.status < 400) {
           var data = JSON.parse(this.response);
@@ -896,6 +920,32 @@
          requestwall.send();
        }
 
+       function getFileDetails(fname) {
+   
+         requestfiledetails.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/fileInfo?filename='+encodeURIComponent(fname), true);
+         requestfiledetails.send();
+       }
+
+
+      function showFileDetails(fname) {			
+        element = document.getElementById("wallMain")
+        element.style.display = "none"
+        element = document.getElementById("callsMain")
+        element.style.display = "none"
+        element = document.getElementById("filesMain")
+        element.style.display = "none"
+        element = document.getElementById("tzone")
+        element.style.display = "none"
+        element = document.getElementById("bbsname")
+        element.style.display = "none"
+        element = document.getElementById("fileDetails")
+        element.style.display = ""
+
+				document.getElementById("fileDetailsFname").innerHTML=fname
+				document.getElementById("filesuploadedto").innerHTML=""
+        getFileDetails(fname)
+			}
+
       function showWallItems() {
         page=1
         showingWall = true        
@@ -912,6 +962,8 @@
         element = document.getElementById("tzone")
         element.style.display = "none"
         element = document.getElementById("bbsname")
+        element.style.display = "none"
+        element = document.getElementById("fileDetails")
         element.style.display = "none"
       }
       
@@ -933,6 +985,8 @@
         element.style.display = ""
         element = document.getElementById("bbsname")
         element.style.display = ""
+        element = document.getElementById("fileDetails")
+        element.style.display = "none"
       }
 
       function showFileItems() {
@@ -954,6 +1008,8 @@
         element.style.display = "none"
         element = document.getElementById("bbsname")
         element.style.display = ""
+        element = document.getElementById("fileDetails")
+        element.style.display = "none"
       }
       
        document.getElementById("callsbody").innerHTML = '';
@@ -978,6 +1034,8 @@
        var requestwall = new XMLHttpRequest();
          requestwall.onload = wallitemsRead
 
+       var requestfiledetails = new XMLHttpRequest();
+         requestfiledetails.onload = filedetailsRead
 
        var requestBBSAd = new XMLHttpRequest();
          requestBBSAd.onload = bbsAdRead

@@ -775,9 +775,9 @@ namespace GlobalLastCallers.Controller
             if (bbsname != null) bbsfilter = " and bbsname = '" + bbsname + "'";
 
             if (!months)
-                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and(dateadd(wk, -" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1" + bbsfilter + " order by cuf.id", sqlConn);
+                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(wk,-" + offset.ToString() + ",(cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) and(dateadd(wk, -" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - ((datepart(dw, getdate())) - 1))) + 7) - 1" + bbsfilter + " order by convert(datetime, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon)))", sqlConn);
             else
-                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id from lastcallers where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1" + bbsfilter + " order by cuf.id", sqlConn);
+                sqlCmd = new SqlCommand("select filename from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where convert(date, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon))) between dateadd(m,0-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1))) and dateadd(m,1-" + offset.ToString() + ", (cast(CAST(GETDATE() as date) as datetime) - (datepart(d, getdate()) - 1)))-1" + bbsfilter + " order by convert(datetime, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon)))", sqlConn);
 
 
             if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
@@ -800,14 +800,15 @@ namespace GlobalLastCallers.Controller
 
         [HttpGet]
         [Route("fileinfo")]
-        [ResponseType(typeof(List<string>))]
+        [ResponseType(typeof(Dictionary<string,string>))]
         // GET: api/GlobalLastCallers/fileinfo
         public IHttpActionResult fileInfo([FromUri] string filename)
         {
-            List<string> bbslist = new List<string>();
+            List<FileDetails> bbslist = new List<FileDetails>();
+            List<string> templist = new List<string>();
 
             SqlCommand sqlCmd;
-            sqlCmd = new SqlCommand("select bbsname from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where filename = @filename", sqlConn);
+            sqlCmd = new SqlCommand("select bbsname, convert(varchar, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon)),113), username from lastcallers inner join calluploadfiles cuf on cuf.callerid=lastcallers.id where filename = @filename order by convert(datetime, dateadd(mi,case when tzoffset is null then 0 else -tzoffset end, dateon + convert(datetime, timeon)))", sqlConn);
             sqlCmd.Parameters.Add("filename", SqlDbType.VarChar);
             sqlCmd.Parameters["filename"].Value = filename;
 
@@ -817,7 +818,16 @@ namespace GlobalLastCallers.Controller
             {
                 while (sqlData.Read())
                 {
-                    if (bbslist.IndexOf(sqlData.GetString(0)) == -1) bbslist.Add(sqlData.GetString(0));
+                    FileDetails f = new FileDetails();
+                    f.bbsname = sqlData.GetString(0);
+                    f.calldate = sqlData.GetString(1);
+                    f.calluser = sqlData.GetString(2);
+
+                    if (templist.Contains(f.bbsname) == false)
+                    {
+                        bbslist.Add(f);
+                        templist.Add(f.bbsname);
+                    }
                 }
             }
             finally

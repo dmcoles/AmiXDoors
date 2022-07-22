@@ -20,6 +20,7 @@
     <IISExpressWindowsAuthentication />
     <IISExpressUseClassicPipelineMode />
     <UseGlobalApplicationHostFile />
+    <Use64BitIISExpress />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -94,6 +95,7 @@
   <ItemGroup>
     <Compile Include="CallerDetails.cs" />
     <Compile Include="CallerStats.cs" />
+    <Compile Include="FileDetails.cs" />
     <Compile Include="Configuration\GlobalLastCallersConfig.cs" />
     <Compile Include="Controller\GlobalLastCallersController.cs" />
     <Compile Include="DayStats.cs" />
