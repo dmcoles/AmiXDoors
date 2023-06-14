@@ -22,6 +22,7 @@ namespace GlobalLastCallers
         public List<int> ConfUploads { get; set; }
         public List<string> UploadFiles { get; set; }
         public List<string> DownloadFiles { get; set; }
+        public bool? Stealth { get; set; }
 
     }
 }
