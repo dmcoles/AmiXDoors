@@ -1316,7 +1316,7 @@ ENDPROC position
 PROC httpRequest(requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
   DEF i,s,n
   DEF sa=0:PTR TO sockaddr_in
-  DEF addr: PTR TO LONG
+  DEF addr: LONG
   DEF hostEnt: PTR TO hostent
   DEF buf
   DEF tv:timeval
@@ -1343,13 +1343,13 @@ PROC httpRequest(requestdata:PTR TO CHAR, tempFile:PTR TO CHAR)
       RETURN 0
     ENDIF
 
-    addr:=hostEnt.h_addr_list[]
-    addr:=addr[]
+    addr:=Long(hostEnt.h_addr_list)
+    addr:=Long(addr)
 
     sa.sin_len:=SIZEOF sockaddr_in
     sa.sin_family:=2
     sa.sin_port:=serverPort
-    sa.sin_addr:=addr[]
+    sa.sin_addr:=addr
 
     s:=Socket(2,1,0)
     IF (s>=0)
