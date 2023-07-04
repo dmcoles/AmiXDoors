@@ -41,6 +41,7 @@ ENDPROC
 
 PROC main()
   DEF ipAddr[20]:STRING
+  DEF myIpAddr[20]:STRING
   DEF hostName[100]:STRING
   DEF fname[255]:STRING
   DEF bbsIp[100]:STRING
@@ -77,11 +78,11 @@ PROC main()
   ENDIF
   
 
-  getAEStringValue(701,ipAddr)
-  IF EstrLen(ipAddr)>0
+  getAEStringValue(701,myIpAddr)
+  IF EstrLen(myIpAddr)>0
     StringF(fname,'ENV:NODE\dIP',node)
     fh1:=Open(fname,MODE_NEWFILE)
-    Write(fh1,ipAddr,StrLen(ipAddr))
+    Write(fh1,myIpAddr,StrLen(myIpAddr))
     Close(fh1)
   ENDIF
 
@@ -138,9 +139,15 @@ PROC main()
     ENDIF
     
     /* Read ip address of user if nodexip file is present */
-    IF (fh3>=0)
+    /*IF (fh3>=0)
       ReadStr(fh3,ipAddr)
       Close(fh3)
+    ENDIF*/
+    
+    IF i=node
+      StrCopy(ipAddr,myIpAddr)
+    ELSE
+      StrCopy(ipAddr,'PRIVATE')
     ENDIF
     
     IF EstrLen(ipAddr)=0
