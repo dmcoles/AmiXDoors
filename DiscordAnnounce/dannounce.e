@@ -332,14 +332,14 @@ PROC init()
     RETURN FALSE
   ENDIF
 
-  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,TAG_DONE]:LONG
+  tags:=NEW [amiSSL_ErrNoPtr,{errno},amiSSL_SocketBase,socketbase,TAG_DONE]
   IF (InitAmiSSLA(tags) <> 0)
     END tags[5]
 		WriteF('Couldn''t initialize AmiSSL!\n');
     cleanup()
     RETURN FALSE
   ENDIF
-  END tags
+  FastDisposeList(tags)
 
 	->ELSEIF (InitAmiSSLA(AmiSSL_ErrNoPtr, {errno}, amiSSL_SocketBase, socketbase, TAG_DONE) <> 0)
   ->		WriteF('Couldn''t initialize AmiSSL!\n');
