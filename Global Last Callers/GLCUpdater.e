@@ -193,12 +193,16 @@ PROC cleanstr(sourcestring)
   ENDFOR
 ENDPROC
 
-PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps,confNums:PTR TO LONG,confUploads:PTR TO LONG,upFiles:PTR TO stringlist,downFiles:PTR TO stringlist)
+PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps,confNums:PTR TO LONG,confUploads:PTR TO LONG,upFiles:PTR TO stringlist,downFiles:PTR TO stringlist, stealth)
   DEF senddata
   DEF linedata
   DEF res
   DEF confNumText[255]:STRING
   DEF confUploadText[255]:STRING
+  DEF downloadstxt[20]:STRING
+  DEF uploadstxt[20]:STRING
+  DEF topcpstxt[20]:STRING
+  DEF stealthtxt[20]:STRING
   DEF tmpstr[20]:STRING
   DEF i
   DEF filenames:PTR TO CHAR
@@ -295,14 +299,24 @@ PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:
   ->StrLen(downloads)+
   ->,"topcps":       11
   ->StrLen(topcps)
+  ->,"stealth":      12
   ->StrLen(filenames))
   ->1
   ->StrLen(confNumText)
   ->StrLen(confUploadText)
   ->}\b\n            3
+
+  StringF(uploadstxt,'\d',uploads)
+  StringF(downloadstxt,'\d',downloads)
+  StringF(topcpstxt,'\d',topcps)
+  IF stealth
+    StrCopy(stealthtxt,'true')
+  ELSE
+    StrCopy(stealthtxt,'false') 
+  ENDIF
   
-  linedata:=String(7+14+15+14+13+13+14+14+12+13+11+20+1+3+StrLen(userName)+StrLen(location)+StrLen(bbsName)+StrLen(dateOn)+StrLen(timeOn)+StrLen(timeOff)+StrLen(actions)+StrLen(uploads)+StrLen(downloads)+StrLen(confNumText)+StrLen(confUploadText)+StrLen(filenames))
-  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\d\s\d\s\d\s','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploads,',"Download": ',downloads,',"topcps": ',topcps,filenames)
+  linedata:=String(7+14+15+14+13+13+14+14+12+13+11+20+12+1+3+StrLen(userName)+StrLen(location)+StrLen(bbsName)+StrLen(dateOn)+StrLen(timeOn)+StrLen(timeOff)+StrLen(actions)+StrLen(uploadstxt)+StrLen(downloadstxt)+StrLen(confNumText)+StrLen(confUploadText)+StrLen(stealthtxt)+StrLen(filenames))
+  StringF(linedata,'\s\d\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s\s','{"Id": ',0,',"Username": "',userName,'","location": "',location,'","Bbsname": "',bbsName,'","Dateon": "',dateOn,'","TimeOn": "',timeOn,'","TimeOff": "',timeOff,'","Actions": "',actions,'","Upload": ',uploadstxt,',"Download": ',downloadstxt,',"topcps": ',topcpstxt,',"stealth": ',stealthtxt,filenames)
   
   IF EstrLen(confNumText)>0
     StrAdd(linedata,',')
@@ -464,10 +478,12 @@ PROC main()
 
   DEF myargs:PTR TO LONG,rdargs
   
+  DEF stealth=0
+  
   StrCopy(serverHost,'scenewall.bbs.io')
 
-  myargs:=[0,0,0,0,0,0]:LONG
-  IF rdargs:=ReadArgs('BBSNAME/A,CALLERSLOG/A,IGNORELOCAL/S,IGNORESYSOP/S,IGNORESYSOPUSER/S,PROCESSALL/S',myargs,NIL)
+  myargs:=[0,0,0,0,0,0,0]:LONG
+  IF rdargs:=ReadArgs('BBSNAME/A,CALLERSLOG/A,STEALTH/S,IGNORELOCAL/S,IGNORESYSOP/S,IGNORESYSOPUSER/S,PROCESSALL/S',myargs,NIL)
     IF myargs[0]<>NIL 
       AstrCopy(bbsName,myargs[0],255)
     ENDIF
@@ -475,21 +491,25 @@ PROC main()
       AstrCopy(logFname,myargs[1],255)
     ENDIF
     IF myargs[2]<>NIL 
-      ignoreLocal:=myargs[2]
+      stealth:=myargs[2]
     ENDIF
     IF myargs[3]<>NIL 
-      ignoreSysop:=myargs[3]
+      ignoreLocal:=myargs[3]
     ENDIF
     IF myargs[4]<>NIL 
-      ignoreSysopUser:=myargs[4]
+      ignoreSysop:=myargs[4]
     ENDIF
     IF myargs[5]<>NIL 
-      processAll:=myargs[5]
+      ignoreSysopUser:=myargs[5]
+    ENDIF
+    IF myargs[6]<>NIL 
+      processAll:=myargs[6]
     ENDIF
     FreeArgs(rdargs)
   ELSE
     RETURN
   ENDIF
+  
   WriteF('Global Last Callers Updater v1.0\n')
   fh:=Open(logFname,MODE_OLDFILE)
   IF fh=0
@@ -733,7 +753,7 @@ PROC main()
 
       IF skip=FALSE
         WriteF('Processing call on \s at \s from \s[\d]....',dateOn,timeOn,userName,userNum)
-        IF postdata(timeout,retries,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps,confNums,confUploads,upFiles,downFiles)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
+        IF postdata(timeout,retries,userName,location,bbsName,timeZone,dateOn,timeOn,timeOff,actions,uploads,downloads,topcps,confNums,confUploads,upFiles,downFiles,stealth)=FALSE THEN WriteF('failed\n') ELSE WriteF('success\n')
       ELSE  
         WriteF('Skipping call on \s at \s from \s[\d]\n',dateOn,timeOn,userName,userNum)
       ENDIF
