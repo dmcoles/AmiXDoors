@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
+using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.AccessControl;
 using System.Text;
 using System.Web.Http;
 using System.Web.Http.Description;
@@ -558,50 +560,140 @@ namespace GlobalLastCallers.Controller
 
             if (existingId == DBNull.Value)
             {
-                SqlCommand sqlCmd = new SqlCommand("insert into LastCallers (username,location,bbsname,dateon,timeon,timeoff,actions,upload,download,topcps,tzoffset,stealth) values (@username,@location,@bbsname,@dateon,@timeon,@timeoff,@actions,@upload,@download,@topcps,@tzoffset,@stealth) SELECT CAST(scope_identity() AS int);", sqlConn);
-                sqlCmd.Parameters.Add("username", SqlDbType.VarChar);
-                sqlCmd.Parameters.Add("location", SqlDbType.VarChar);
-                sqlCmd.Parameters.Add("bbsname", SqlDbType.VarChar);
-                sqlCmd.Parameters.Add("dateon", SqlDbType.Date);
-                sqlCmd.Parameters.Add("timeon", SqlDbType.VarChar);
-                sqlCmd.Parameters.Add("timeoff", SqlDbType.VarChar);
-                sqlCmd.Parameters.Add("actions", SqlDbType.VarChar);
-                sqlCmd.Parameters.Add("upload", SqlDbType.Int);
-                sqlCmd.Parameters.Add("download", SqlDbType.Int);
-                sqlCmd.Parameters.Add("topcps", SqlDbType.Int);
-                sqlCmd.Parameters.Add("tzoffset", SqlDbType.Int);
-                sqlCmd.Parameters.Add("stealth", SqlDbType.Bit);
+                SqlCommand sqlLastCall = new SqlCommand("select top 1 id,dateon,timeon,timeoff,actions  from lastcallers where bbsname=@bbsname and username=@username order by id desc", sqlConn);
+                sqlLastCall.Parameters.Add("username", SqlDbType.VarChar);
+                sqlLastCall.Parameters.Add("bbsname", SqlDbType.VarChar);
+                sqlLastCall.Parameters["username"].Value = newCaller.Username;
+                sqlLastCall.Parameters["bbsname"].Value = newCaller.Bbsname;
 
-                sqlCmd.Parameters["username"].Value = newCaller.Username;
+                DateTime callDate = DateTime.Now;
+                TimeSpan callStartTime = new TimeSpan(0, 0, 0);
+                TimeSpan callEndTime = new TimeSpan(0, 0, 0);
+                string actions = "";
+                int callid = 0;
 
-                if ((newCaller.Location != null) && (newCaller.Location!=String.Empty))
-                    sqlCmd.Parameters["location"].Value = newCaller.Location;
-                else
-                    sqlCmd.Parameters["location"].Value = DBNull.Value;
+                bool found = false;
 
-                sqlCmd.Parameters["bbsname"].Value = newCaller.Bbsname;
-                sqlCmd.Parameters["dateon"].Value = dateOn;
-                sqlCmd.Parameters["timeon"].Value = newCaller.Timeon;
-                sqlCmd.Parameters["timeoff"].Value = newCaller.Timeoff;
-                sqlCmd.Parameters["actions"].Value = newCaller.Actions;
-                sqlCmd.Parameters["upload"].Value = newCaller.Upload;
-                sqlCmd.Parameters["download"].Value = newCaller.Download;
-                sqlCmd.Parameters["topcps"].Value = newCaller.TopCps;
-                sqlCmd.Parameters["stealth"].Value = newCaller.Stealth;
-                if (tzMins != null)
-                    sqlCmd.Parameters["tzoffset"].Value = tzMins;
-                else
-                    sqlCmd.Parameters["tzoffset"].Value = DBNull.Value;
-                sqlCmd.CommandTimeout = 60;
-
+                if (sqlConn.State != ConnectionState.Open) sqlConn.Open();
+                SqlDataReader sqlData = sqlLastCall.ExecuteReader();
                 try
                 {
-                    newCaller.Id = (int)sqlCmd.ExecuteScalar();
-                    newCaller.Dateon = dateOn.ToString("dd-MM-yy");
+                    while (sqlData.Read())
+                    {
+                        callid = sqlData.GetInt32(0);
+                        callDate = sqlData.GetDateTime(1);
+                        bool startvalid = TimeSpan.TryParse(sqlData.GetString(2), out callStartTime);
+                        bool endvalid = TimeSpan.TryParse(sqlData.GetString(3), out callEndTime);
+                        actions = sqlData.GetString(4);
+                        if (startvalid && endvalid) found = true;
+                    }
                 }
                 finally
                 {
-                    sqlCmd.Dispose();
+                    sqlData.Close();
+                    sqlData.Dispose();
+                    sqlLastCall.Dispose();
+                }
+
+                if (found)
+                {
+                    DateTime oldCallEnd = callDate;
+                    if (callEndTime < callStartTime) oldCallEnd = oldCallEnd.AddDays(1);
+                    oldCallEnd = oldCallEnd + callEndTime;
+
+                    DateTime newCallStart = dateOn + TimeSpan.Parse(newCaller.Timeon);
+                    if (newCallStart - oldCallEnd >= TimeSpan.FromMinutes(5)) found = false;
+                }
+
+                if (found)
+                {
+                    SqlCommand sqlCmd = new SqlCommand("update LastCallers set timeoff = @timeoff, upload = upload + @upload, download = download+ @download, topcps = IIF(topcps>@topcps1, topcps, @topcps2),actions=@actions where id = @id ;", sqlConn);
+                    sqlCmd.Parameters.Add("id", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("timeoff", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("actions", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("upload", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("download", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("topcps1", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("topcps2", SqlDbType.Int);
+
+                    sqlCmd.Parameters["id"].Value = callid;
+                    sqlCmd.Parameters["timeoff"].Value = newCaller.Timeoff;
+                    sqlCmd.Parameters["upload"].Value = newCaller.Upload;
+                    sqlCmd.Parameters["download"].Value = newCaller.Download;
+                    sqlCmd.Parameters["topcps1"].Value = newCaller.TopCps;
+                    sqlCmd.Parameters["topcps2"].Value = newCaller.TopCps;
+
+                    StringBuilder newactions = new StringBuilder();
+                    for (int i = 0; i < newCaller.Actions.Length; i++)
+                    {
+                        if (newCaller.Actions[i] != '-')
+                        {
+                            newactions.Append(newCaller.Actions[i]);
+                        }
+                        else
+                        {
+                            newactions.Append(actions[i]);
+                        }
+                    }
+                    sqlCmd.Parameters["actions"].Value = newactions.ToString();
+
+                    try
+                    {
+                        sqlCmd.ExecuteNonQuery();
+                        newCaller.Id = callid;
+                        newCaller.Dateon = dateOn.ToString("dd-MM-yy");
+                    }
+                    finally
+                    {
+                        sqlCmd.Dispose();
+                    }
+                }
+
+                else {
+                    SqlCommand sqlCmd = new SqlCommand("insert into LastCallers (username,location,bbsname,dateon,timeon,timeoff,actions,upload,download,topcps,tzoffset,stealth) values (@username,@location,@bbsname,@dateon,@timeon,@timeoff,@actions,@upload,@download,@topcps,@tzoffset,@stealth) SELECT CAST(scope_identity() AS int);", sqlConn);
+                    sqlCmd.Parameters.Add("username", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("location", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("bbsname", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("dateon", SqlDbType.Date);
+                    sqlCmd.Parameters.Add("timeon", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("timeoff", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("actions", SqlDbType.VarChar);
+                    sqlCmd.Parameters.Add("upload", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("download", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("topcps", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("tzoffset", SqlDbType.Int);
+                    sqlCmd.Parameters.Add("stealth", SqlDbType.Bit);
+
+                    sqlCmd.Parameters["username"].Value = newCaller.Username;
+
+                    if ((newCaller.Location != null) && (newCaller.Location != String.Empty))
+                        sqlCmd.Parameters["location"].Value = newCaller.Location;
+                    else
+                        sqlCmd.Parameters["location"].Value = DBNull.Value;
+
+                    sqlCmd.Parameters["bbsname"].Value = newCaller.Bbsname;
+                    sqlCmd.Parameters["dateon"].Value = dateOn;
+                    sqlCmd.Parameters["timeon"].Value = newCaller.Timeon;
+                    sqlCmd.Parameters["timeoff"].Value = newCaller.Timeoff;
+                    sqlCmd.Parameters["actions"].Value = newCaller.Actions;
+                    sqlCmd.Parameters["upload"].Value = newCaller.Upload;
+                    sqlCmd.Parameters["download"].Value = newCaller.Download;
+                    sqlCmd.Parameters["topcps"].Value = newCaller.TopCps;
+                    sqlCmd.Parameters["stealth"].Value = newCaller.Stealth;
+                    if (tzMins != null)
+                        sqlCmd.Parameters["tzoffset"].Value = tzMins;
+                    else
+                        sqlCmd.Parameters["tzoffset"].Value = DBNull.Value;
+                    sqlCmd.CommandTimeout = 60;
+                    try
+                    {
+                        newCaller.Id = (int)sqlCmd.ExecuteScalar();
+                        newCaller.Dateon = dateOn.ToString("dd-MM-yy");
+                    }
+                    finally
+                    {
+                        sqlCmd.Dispose();
+                    }
                 }
             }
             else
