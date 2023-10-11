@@ -18,6 +18,8 @@ DEF serverHost[255]:STRING
 DEF serverPort=1541
 DEF fds=NIL:PTR TO LONG
 
+#date verstring '$VER: GLCUpdater 0.1.0-%Y%m%d%h%n%s (%d.%aM.%Y)' 
+
 PROC setSingleFDS(socketVal)
   DEF i,n
   
@@ -666,7 +668,7 @@ PROC main()
         
         
         IF ((tmp:=InStr(logLine,') Conference Joined'))>=0)
-          WHILE (tmp=>0) AND (logLine[tmp]<>'(') DO tmp--
+          WHILE (tmp=>0) AND (logLine[tmp]<>"(") DO tmp--
           IF (tmp>=0)
             newConf:=Val(logLine+tmp+1)
           ENDIF
@@ -765,3 +767,5 @@ PROC main()
   END fds[32]
   
 ENDPROC
+
+CHAR verstring

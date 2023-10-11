@@ -17,6 +17,8 @@ CONST GET_CMD_TOOLTYPE=707
 
 ENUM ERR_NONE, ERR_KICK
 
+#date verstring '$VER: GLCViewer 0.1.0-%Y%m%d%h%n%s (%d.%aM.%Y)' 
+
 RAISE ERR_KICK IF KickVersion()=FALSE
 
 DEF serverHost[255]:STRING
@@ -939,3 +941,4 @@ EXCEPT DO
   IF aedoorbase<>0 THEN CloseLibrary(aedoorbase)
 ENDPROC
 
+CHAR verstring
