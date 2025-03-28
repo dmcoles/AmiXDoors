@@ -11,7 +11,6 @@
       implenmented at this time:
 
           PLAYPEN_<node>=<dir>
-          EXCLUDE_<num>=<user/slot>
           SHARE_DATA=<confpath>
           
       The method of installation and configuration is the same as with ConfTop 2.3

@@ -62,6 +62,7 @@ DEF skipEmpty=FALSE
 DEF minLimit=0
 DEF showResetDate=FALSE
 DEF node=0
+DEF userId=0,excludeFlag=FALSE
 
 DEF cfgFileName[255]:STRING
 DEF dataFileName[255]:STRING
@@ -441,6 +442,9 @@ PROC readConfig(configFile:PTR TO CHAR)
     readToolType(do.tooltypes,'CFGFILE',cfgFileName)
     readToolType(do.tooltypes,'DATAFILE',dataFileName)
     readToolType(do.tooltypes,'SUBJECT',subject,FALSE)
+    
+    StringF(tempStr,'EXCLUDE_\d',userId )
+    IF checkToolTypeExists(do.tooltypes,tempStr) THEN excludeFlag:=TRUE
     
     RightStr(tempStr,cfgFileName,5)
     UpperStr(tempStr)
@@ -1068,6 +1072,7 @@ PROC main() HANDLE
   userList:=NEW userList.stdlist(1000)
 
   node:=getAEIntValue(BB_NODEID)
+  userId:=getAEIntValue(DT_SLOTNUMBER)
   getAEStringValue(BB_LOCAL,bbsLoc)
   getAEStringValue(BB_CONFNAME,confName)
   getAEStringValue(BB_CONFLOCAL,confLocation)
@@ -1095,6 +1100,11 @@ PROC main() HANDLE
   readConfig(tempStr)
   StringF(tempStr,'\s\s',confLocation,cfgFileName)
   found:=readConfig(tempStr)
+
+  StrCopy('user id = \d',userId)
+  writeDebugLog(tempStr)
+  StrCopy('excludeflag = \d',excludeFlag)
+  writeDebugLog(tempStr)
   
   header()
   
@@ -1104,7 +1114,12 @@ PROC main() HANDLE
     IF (EstrLen(uploadFile)>0)
       priv:=checkPriv(uploadFile)
       IF priv=FALSE
-        updateStats(uploadFile,userName,userLocation)
+        IF excludeFlag
+          transmit('Special user, skipping update.')
+          writeDebugLog('Special user, skipping update.')
+        ELSE
+          updateStats(uploadFile,userName,userLocation)
+        ENDIF
       ELSE
         transmit('Private upload, skipping update.')
         writeDebugLog('Private upload, skipping update.')
@@ -1135,4 +1150,4 @@ EXCEPT DO
 ENDPROC
 
 verdata:
-  CHAR '$VER: Conftop-II V0.99-130420221312 By REbEL/QTX',0
+  CHAR '$VER: Conftop-II V0.99-280320251637 By REbEL/QTX',0
