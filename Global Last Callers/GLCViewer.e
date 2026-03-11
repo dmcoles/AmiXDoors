@@ -745,7 +745,7 @@ PROC main() HANDLE
   DEF retries=5
   DEF centreName=FALSE
   DEF bbsname[255]:STRING
-  DEF node=-1
+  DEF node=-1,size,membuff
   DEF myargs:PTR TO LONG,rdargs
 
   KickVersion(37)  -> E-Note: requires V37
@@ -871,14 +871,26 @@ PROC main() HANDLE
   
   getjson(timeout,retries,page,count,bbsname,timeZone,tempFile)
   bufsize:=FileLength(tempFile)
+  IF bufsize>0
+    StrCopy(tempStr,tempFile)
+  ELSE
+    StrCopy(tempStr,'PROGDIR:glc.glcdata')
+    bufsize:=FileLength(tempStr)
+  ENDIF
   IF bufsize<1 THEN Raise(10)
+  
   jsonBuffer:=New(bufsize)
   IF (jsonBuffer = NIL) THEN Raise(6)
 
-  fh2:=Open(tempFile,MODE_OLDFILE)
+  fh2:=Open(tempStr,MODE_OLDFILE)
   IF fh2<>0
     Read(fh2,jsonBuffer,bufsize)
     Close(fh2)
+    fh2:=Open('PROGDIR:glc.glcdata',MODE_NEWFILE)
+    IF fh2
+      Write(fh2,jsonBuffer,bufsize)
+      Close(fh2)
+    ENDIF
     fh2:=0
   ENDIF
 
@@ -903,15 +915,15 @@ PROC main() HANDLE
 
     tok:=New(SIZEOF jsmntok_t * tokcount)
     IF (tok = NIL) THEN Raise(9)   
-  
+
     jsmn_init(p)
   r:=jsmn_parse(p, jsonStart, bufsize-position, tok, tokcount)
   IF (r>=0)
   ->tok, p.toknext
     extractdata(fh2,outpath,jsonStart, tok, p.toknext,TRUE)
     IF fh2<>0 THEN Close(fh2)
-
     fh2:=Open(tempFile,MODE_OLDFILE)
+    
     IF fh2<>0 THEN displayData(fh2,scrnclear,style,centreName,StrLen(bbsname)>0)
   ELSE
     SELECT r

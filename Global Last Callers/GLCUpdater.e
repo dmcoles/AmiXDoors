@@ -18,7 +18,7 @@ DEF serverHost[255]:STRING
 DEF serverPort=1541
 DEF fds=NIL:PTR TO LONG
 
-#date verstring '$VER: GLCUpdater 0.1.0-%Y%m%d%h%n%s (%d.%aM.%Y)' 
+#date verstring '$VER: GLCUpdater 1.0.0-%Y%m%d%h%n%s (%d.%aM.%Y)' 
 
 PROC setSingleFDS(socketVal)
   DEF i,n
@@ -195,6 +195,92 @@ PROC cleanstr(sourcestring)
   ENDFOR
 ENDPROC
 
+PROC processLocalData(timeout)
+  DEF fh=0,retry=0,res,fsize,dlen,oset,n
+  DEF httpData
+  
+  REPEAT
+    //initially open readwrite (shared)
+    //this makes sure file is created
+    IF fh=0 THEN fh:=Open('PROGDIR:glc.localdata',MODE_READWRITE)
+    IF (fh=0)
+      res:=0
+    ELSE
+      //upgrade to exclusive
+      res:=ChangeMode(CHANGE_FH,fh,EXCLUSIVE_LOCK)
+    ENDIF
+    IF (res=0)
+      Delay(50)
+      retry++
+    ENDIF
+  UNTIL res OR (retry=10)
+  
+  IF res
+    Seek(fh,0,OFFSET_END)
+    fsize:=Seek(fh,0,OFFSET_BEGINNING)
+    IF fsize
+      WriteF('processing locally cached data\n')
+      n:=1
+      httpData:=New(fsize)
+      IF httpData
+        Read(fh,httpData,fsize)
+        Seek(fh,0,OFFSET_BEGINNING)
+        oset:=0
+        WHILE oset<fsize
+          WriteF('attemping to send saved data packet \d\n',n++)
+          dlen:=StrLen(httpData+oset)+1
+          res:=httpRequest(timeout,1,httpData,NIL)
+          IF (res<200) OR (res>299)
+            IF (oset=0) AND (res<0)
+              Close(fh)
+              Dispose(httpData)
+              RETURN
+            ENDIF
+            //re-write out the failed data including 0 terminator
+            Write(fh,httpData+oset,dlen)
+          ENDIF
+          oset+=dlen
+        ENDWHILE
+          
+        //truncate file to current size
+        SetFileSize(fh,OFFSET_CURRENT,0)
+        Dispose(httpData)
+      ENDIF
+    ENDIF
+  ENDIF
+  IF fh THEN Close(fh)
+ENDPROC
+
+PROC saveLocalData(httpdata:PTR TO CHAR)
+  DEF fh=0,res,retry=0
+  
+  REPEAT
+    //initially open readwrite (shared)
+    //this makes sure file is created
+    IF fh=0 THEN fh:=Open('PROGDIR:glc.localdata',MODE_READWRITE)
+    IF (fh=0)
+      res:=0
+    ELSE
+      //upgrade to exclusive
+      res:=ChangeMode(CHANGE_FH,fh,EXCLUSIVE_LOCK)
+    ENDIF
+    IF (res=0)
+      Delay(50)
+      retry++
+    ENDIF
+  UNTIL res OR (retry=10)
+  
+  IF res
+    Seek(fh,0,OFFSET_END)
+    //write out the data including 0 terminator
+    Write(fh,httpdata,StrLen(httpdata)+1)
+    Close(fh)
+  ELSE
+    WriteF('unable to open the localdata file\n')
+    IF fh THEN Close(fh)
+  ENDIF
+ENDPROC
+
 PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:PTR TO CHAR,timeZone:PTR TO CHAR,dateOn:PTR TO CHAR,timeOn:PTR TO CHAR,timeOff:PTR TO CHAR,actions:PTR TO CHAR,uploads,downloads,topcps,confNums:PTR TO LONG,confUploads:PTR TO LONG,upFiles:PTR TO stringlist,downFiles:PTR TO stringlist, stealth)
   DEF senddata
   DEF linedata
@@ -228,11 +314,11 @@ PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:
       StringF(tmpstr,'\d',confUploads[i])
       StrAdd(confUploadText,tmpstr)
     ENDIF
-    IF EstrLen(confNumText)>0
-      StrAdd(confNumText,'],')
-      StrAdd(confUploadText,']')
-    ENDIF
   ENDFOR
+  IF EstrLen(confNumText)>0
+    StrAdd(confNumText,'],')
+    StrAdd(confUploadText,']')
+  ENDIF
 
   FOR i:=0 TO upFiles.count()-1
     fnameslen1+=EstrLen(upFiles.item(i))+3
@@ -341,6 +427,7 @@ PROC postdata(timeout,retries,userName:PTR TO CHAR,location:PTR TO CHAR,bbsName:
   ->WriteF(senddata)
   res:=httpRequest(timeout,retries,senddata,NIL)
   IF (res<200) OR (res>299)
+    saveLocalData(senddata)
     WriteF('rescode=\d\ndata=\s\n',res,senddata)
   ENDIF
   
@@ -550,6 +637,9 @@ PROC main()
   
   currentConf:=0
 
+  //firstly try and process any data cached locally
+  processLocalData(timeout)
+  
   IF processAll=FALSE
     offset:=4096
     Seek(fh,0,OFFSET_END)
