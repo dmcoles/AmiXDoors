@@ -161,19 +161,32 @@ PROC count() OF stdlist IS ListLen(self.items)
 
 PROC maxSize() OF stdlist IS ListMax(self.items)
 
-PROC sort(compareProc,l,r) OF stdlist
-DEF i,j,x,t:PTR TO user
-  i:=l; j:=r; x:=self.items[Shr(l+r,1)]
+PROC partition(compareProc, first, last) OF stdlist
+  DEF splitv, up, down, i
+  splitv:=self.items[first]
+  up:=first
+  down:=last
   REPEAT
-    WHILE compareProc(self.items[i],x)<0 DO i++
-    WHILE compareProc(self.items[j],x)>0 DO j--
-    IF i<=j
-      t:=self.items[i]; self.items[i]:=self.items[j]; self.items[j]:=t
-      i++; j--
+    WHILE (compareProc(self.items[up],splitv)<=0) AND (up<last) DO up++
+    WHILE (compareProc(self.items[down],splitv)>0) AND (down>first) DO down--
+    IF up<down
+      i:=self.items[up]
+      self.items[up]:=self.items[down]
+      self.items[down]:=i
     ENDIF
-  UNTIL i>j
-  IF l<j THEN self.sort(compareProc,l,j)
-  IF i<r THEN self.sort(compareProc,i,r)
+  UNTIL up>=down
+  i:=self.items[first]
+  self.items[first]:=self.items[down]
+  self.items[down]:=i
+ENDPROC down
+  
+PROC sort(compareProc, first, last) OF stdlist
+  DEF index
+  IF first<last
+    index:=self.partition(compareProc, first, last)
+    self.sort(compareProc, first, index-1)
+    self.sort(compareProc, index+1, last)
+  ENDIF
 ENDPROC
 
 ->returns system date
@@ -437,7 +450,7 @@ PROC readConfig(configFile:PTR TO CHAR)
     readToolType(do.tooltypes,'MAILUSER',mailUser)
     readToolType(do.tooltypes,'BULLFILE',bullFile)
     readToolType(do.tooltypes,'NEXTDOOR',nextDoor)
-    readToolType(do.tooltypes,'CONFNAME',confName)
+    readToolType(do.tooltypes,'CONFNAME',confName)  
     readToolType(do.tooltypes,'FROMUSER',fromUser)
     readToolType(do.tooltypes,'CFGFILE',cfgFileName)
     readToolType(do.tooltypes,'DATAFILE',dataFileName)
@@ -1101,9 +1114,9 @@ PROC main() HANDLE
   StringF(tempStr,'\s\s',confLocation,cfgFileName)
   found:=readConfig(tempStr)
 
-  StrCopy('user id = \d',userId)
+  StrCopy(tempStr,'user id = \d',userId)
   writeDebugLog(tempStr)
-  StrCopy('excludeflag = \d',excludeFlag)
+  StrCopy(tempStr,'excludeflag = \d',excludeFlag)
   writeDebugLog(tempStr)
   
   header()
@@ -1150,4 +1163,4 @@ EXCEPT DO
 ENDPROC
 
 verdata:
-  CHAR '$VER: Conftop-II V0.99-280320251637 By REbEL/QTX',0
+  CHAR '$VER: Conftop-II V0.99-090720261122 By REbEL/QTX',0
