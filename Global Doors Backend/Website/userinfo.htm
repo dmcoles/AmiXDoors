@@ -1,0 +1,326 @@
+﻿<!DOCTYPE HTML>
+<html>
+<head>
+ <meta http-equiv="Content-Type" content="text/html;charset=utf-8"> 
+ <style type="text/css"></style>
+<style>@font-face {
+  font-family: 'TopazNew';
+  src: url('topaz/TopazPlus_a500_v1.0.eot'); /* IE9 Compat Modes */
+  src: url('topaz/TopazPlus_a500_v1.0.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
+       url('topaz/TopazPlus_a500_v1.0-webfont.woff2') format('woff2'), /* Super Modern Browsers */
+       url('topaz/topazplus_a500_v1.0-webfont.woff') format('woff'), /* Pretty Modern Browsers */
+       url('topaz/TopazPlus_a500_v1.0.ttf')  format('truetype'), /* Safari, Android, iOS */
+       url('topaz/TopazPlus_a500_v1.0.svg#svgFontName') format('svg'); /* Legacy iOS */
+}
+</style>
+</head>
+<body vlink="#00eeee" text="#ffffff" link="#00ffff" bgcolor="#000000">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-pprn3073KE6tl6bjs2QrFaJGz5/SUsLqktiwsUTF55Jfv3qYSDhgCecCxMW52nD2" crossorigin="anonymous"></script>
+<pre style="font-family: 'TopazNew', Fallback, monospace;">
+<div id="hdr" <font color="#ff00ff"> SCENEWALL.BBS.IO
+
+<div style="display: inline-flex;height: 25px;align-items: center;"><label>Username:</label> <input id="username" type="text"/><button onclick="showCallItems()">Show</button> <select onchange="showCallItems()" name='Timezone' id='tzone'>
+<option value=''>No Timezone Adjustment</option>
+<option selected="selected" value='UTC'>Coordinated Universal Time</option>
+<option value='GMT Standard Time'>GMT Standard Time</option>
+<option value='W. Europe Standard Time'>W. Europe Standard Time</option>
+</select><div>
+</font></div></pre>
+<pre style="font-family: 'TopazNew', Fallback, monospace;"><div id="callsMain" ><div style="float: left">  <font color="#ff00ff">               ___   ___________________________________   ___   __________________</font>
+  <font color="#ff00ff">              /  /\ / _   /  ___/__   __/  ___/ _   /  /\ /  /\ /  ___/ _  _/  ___/\</font>
+  <font color="#ff00ff">             /  /_//     /\__  /\_/  /\/  /\_/     /  /_//  /_//  ___/     )\__  /\/</font>
+  <font color="#ff00ff">            /_____/__/__/_____/ //__/ /_____/__/__/_____/_____/_____/__/__/_____/ /</font>
+  <font color="#ff00ff">            \_____\__\__\_____\/ \__\/\_____\__\__\_____\_____\_____\__\__\_____\/</font><font color="#0000ff">SdN</font>
+  <font color="#ffff00">                        GLOBAL LASTCALLERS! - (C) REbEL/qUARTEX                     </font>
+  
+  <font id="callersHeader" color="#00ffff">USERNAME           BBS                   LOCATION              DATE  TIME ON BBS ACTIONS    UPL DWNL</font>
+  <font color="#0000ff">------------------v---------------------v---------------------v-----v-----------v----------v----v----</font>
+<div id="callsbody"></div>  <font color="#0000ff">------------------^---------------------^---------------------^-----^-----------^----------^----^----</font>
+  <font color="#ffff00">           [</font><font color="#00ffff">D</font><font color="#ffff00">]</font><font color="#ff00ff">OWNLOAD</font>   <font color="#ffff00">[</font><font color="#00ffff">d</font><font color="#ffff00">]</font><font color="#ff00ff">OWNLOAD FAIL</font>  <font color="#ffff00">[</font><font color="#00ffff">o</font><font color="#ffff00">]</font><font color="#ff00ff">PERATOR PAGED!</font>  <font color="#ffff00">[</font><font color="#00ffff">F</font><font color="#ffff00">]</font><font color="#ff00ff">ILE SCAN</font>   <font color="#ffff00">[</font><font color="#00ffff">A</font><font color="#ffff00">]</font><font color="#ff00ff">CCOUNT EDIT!</font>
+  <font color="#ffff00">           [</font><font color="#00ffff">U</font><font color="#ffff00">]</font><font color="#ff00ff">PLOAD</font>     <font color="#ffff00">[</font><font color="#00ffff">u</font><font color="#ffff00">]</font><font color="#ff00ff">PLOAD FAIL</font>    <font color="#ffff00">[</font><font color="#00ffff">O</font><font color="#ffff00">]</font><font color="#ff00ff">PERATOR CHAT !</font>  <font color="#ffff00">[</font><font color="#00ffff">H</font><font color="#ffff00">]</font><font color="#ff00ff">ACK TRY!</font>   <font color="#ffff00">[</font><font color="#00ffff">L</font><font color="#ffff00">]</font><font color="#ff00ff">OST CARRIER!</font>
+  <font color="#ffff00">           [</font><font color="#00ffff">*</font><font color="#ffff00">]</font><font color="#ff00ff">NEW-USER</font>  <font color="#ffff00">[</font><font color="#00ffff">B</font><font color="#ffff00">]</font><font color="#ff00ff">ULLETINS</font>      <font color="#ffff00">[</font><font color="#00ffff">E</font><font color="#ffff00">]</font><font color="#ff00ff">X. RESTR. FILE</font>
+  <font color="#0000ff">-----------------------------------------------------------------------------------------------------</font>
+<div id="status1body"></div><div id="status2body"></div><div id="recordsbody"></div>  <font color="#0000ff">-----------------------------------------------------------------------------------------------------</font>
+<div id="callsmobileentry">
+<input style="margin:0 10px 0 0" onclick="callsprevpage()" type="button" value="Page back"><span /><input style="margin:0 10px 0 0" onclick="callsnextpage()" type="button" value="Page forward">
+</div></div></div>
+<div style="font-family: 'TopazNew', Fallback, monospace;" id = "callstats">
+  Files uploaded in the last month:
+  
+<font color="#ffffff"><div id="fileslist"></div></font></div>
+
+</pre>
+<script>
+      function is_touch_device() {
+        return (('ontouchstart' in window) || (navigator.MaxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0));
+      }
+
+      function callsprevpage() {
+        page++
+        getCallItems()
+      }
+
+      function callsnextpage() {
+        page--
+        if (page<1) { page = 1 }
+        getCallItems()
+      }
+
+      function keyPressHandler(event) {
+        if (event.altKey || event.ctrlKey) return          
+          
+        if(event.keyCode == 38) {
+                callsprevpage()
+				event.preventDefault()
+        }
+        else if(event.keyCode == 40) {
+                callsnextpage()
+				event.preventDefault()
+        }
+      }
+
+
+   
+     function getFileItems() {
+      var username = document.getElementById("username").value
+      if (username.length==0) return
+
+         requestfiles.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/recentfiles?months=true&username='+username, true);
+        requestfiles.send();
+      }
+      
+
+       function getCallItems() {
+
+        var username = document.getElementById("username").value
+        if (username.length==0) return
+
+        var tz=document.getElementById("tzone").value
+		
+        var start = ((page - 1) * 30) + 1
+        requestcalls.open('GET', 'https://scenewall.bbs.io:1543/GlobalLastCallers/api/GlobalLastCallers/?username='+encodeURIComponent(username)+'&tzname='+encodeURIComponent(tz)+'&count=30&start=' + start, true);
+		     // Send request
+         requestcalls.send();
+       }
+
+
+	   	function fileitemsRead() {
+		  var list = "  "
+
+		  if (requestfiles.status >= 200 && requestfiles.status < 400) {
+        var data = JSON.parse(this.response);
+        var l = 0
+        var n = 0
+        data.forEach(function (filename) {
+          n++
+          l = l+filename.length+1
+          if (l>79)
+          {
+            list = list + String.fromCharCode(13)+"  ";
+            l = filename.length+1
+          }
+          list = list + filename+' '
+        })
+		  }
+
+       if (list.length<=2) list = "  None"
+       document.getElementById("fileslist").innerHTML=list
+      }
+
+       function callitemsRead() {
+        if (requestcalls.status >= 200 && requestcalls.status < 400) {
+          var data = JSON.parse(this.response);
+		  var singleBBS = false;
+
+			document.getElementById("callersHeader").innerHTML = 'USERNAME           BBS                   LOCATION              DATE  TIME ON BBS ACTIONS    UPL DWNL';
+		  
+		  
+          document.getElementById("callsbody").innerHTML=""
+          data.calls.forEach(function (callItem) {
+
+		      var upkb = callItem.Upload
+			  
+			  if ((upkb<0) || (upkb>9999)) {
+				upkb =( upkb >> 10) & 0x003fffff
+				if (upkb>999) {
+				  var i = upkb >> 10
+				  var f = ((upkb & 1023) * 10) >> 10
+          if (i>9) {
+            var ul = ('----' + i +'G')
+          } else {
+            var ul = ('----' + i + '.'+f+'G')
+          }
+				} else {
+                  var ul = ('----' + upkb+'M')
+				}
+			} else {
+               var ul = ('----' + callItem.Upload)
+			}
+				  
+
+			var dnkb = callItem.Download
+			  
+			 if ((dnkb<0) || (dnkb>9999)) {
+			  dnkb =( dnkb >> 10) & 0x003fffff
+			  if (dnkb>999) {
+				 var i = dnkb >> 10
+				 var f = ((dnkb & 1023) * 10) >> 10
+         if (i>9) {
+           var dl = ('----' + i + 'G')
+         } else {
+           var dl = ('----' + i + '.'+f+'G')
+         }
+			  } else {
+                var dl = ('----' + dnkb+'M')
+			  }
+			} else {
+               var dl = ('----' + callItem.Download)
+			}
+
+
+      if (dl.length>8) { dl = '----LOTS' }
+      if (ul.length>8) { ul = '----LOTS' }
+      dl = dl.slice(dl.length - 4)
+      ul = ul.slice(ul.length - 4)
+
+				output = '  <font color="#00ffff">' + callItem.Username.substring(0,18).padEnd(18) + '</font><font color="#0000ff">:</font><font color="#00ff00">' + callItem.Bbsname.substring(0,21).padEnd(21) + '</font><font color="#0000ff">:</font>' + callItem.Location.substring(0,21).padEnd(21) + '</font><font color="#0000ff">:</font>' + callItem.Dateon.substring(0, 5) + '<font color="#0000ff">:</font><font color="#00ffff">' + callItem.Timeon + '-' + callItem.Timeoff + '</font><font color="#0000ff">:</font>' + callItem.Actions + '<font color="#0000ff">:</font>' + ul + '<font color="#0000ff">:</font>' + dl + '\n'
+              document.getElementById("callsbody").innerHTML = document.getElementById("callsbody").innerHTML + output
+          })
+
+          //StringF(writeStr, '[35mSTATUS [32m\l\s[8][35m: [1;33mCALLS [0;34m[[36m\r\s[3][34m] [1;33mTOP-CPS [0;34m[[36m\r\s[5][34m]  [1;33mUL [0;34m[[36m\r\s[7] [1;33mKB[0;34m]  [1;33mDL [0;34m[[36m\r\s[7] [1;33mKB[0;34m]', statdate, statcalls, statcps, statup, statdown)
+
+          output = '  <font color="#ff00ff">STATUS</font> <font color="#00ff00">' + data.previousDayStats.statdate.substring(0,8) + '</font><font color="#ff00ff">:</font><font color="#ffff00"> CALLS</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.previousDayStats.calls.toString().padStart(3) + '</font><font color="#0000ff">]</font> <font color="#ffff00">TOP-CPS</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.previousDayStats.topcps.toString().padStart(5) + '</font><font color="#0000ff">]</font>  <font color="#ffff00">UL</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.previousDayStats.uploads.toString().padStart(7) + ' KB</font><font color="#0000ff">]</font>  <font color="#ffff00">DL</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.previousDayStats.downloads.toString().padStart(7) + ' KB</font><font color="#0000ff">]</font>'
+            document.getElementById("status1body").innerHTML = output
+            output = '  <font color="#ff00ff">STATUS</font> <font color="#00ff00">' + data.yesterdayStats.statdate.substring(0, 8) + '</font><font color="#ff00ff">:</font><font color="#ffff00"> CALLS</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.yesterdayStats.calls.toString().padStart(3) + '</font><font color="#0000ff">]</font> <font color="#ffff00">TOP-CPS</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.yesterdayStats.topcps.toString().padStart(5) + '</font><font color="#0000ff">]</font>  <font color="#ffff00">UL</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.yesterdayStats.uploads.toString().padStart(7) + ' KB</font><font color="#0000ff">]</font>  <font color="#ffff00">DL</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.yesterdayStats.downloads.toString().padStart(7) + ' KB</font><font color="#0000ff">]</font>'
+            document.getElementById("status2body").innerHTML = output
+
+            output = '  <font color="#ff00ff">ALLTIME RECORDS: </font><font color="#ffff00">CALLS</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.records.allcalls.toString().padStart(3) + '</font><font color="#0000ff">]</font> <font color="#ff00ff">MOST CALLED SYSTEM</font> <font color="#0000ff">[</font><font color="#00ffff">' + data.records.calls.toString().padStart(3) + '</font><font color="#0000ff">]</font><font color="#ff00ff">: </font><font color="#00ff00">' + data.records.mostcalled + '</font>'
+
+            document.getElementById("recordsbody").innerHTML = output
+
+        } else {
+          console.log('error');
+        }
+       }
+
+      function getCookie(cname) {
+        var name = cname + "=";
+        var decodedCookie = decodeURIComponent(document.cookie);
+        var ca = decodedCookie.split(';');
+        for(var i = 0; i <ca.length; i++) {
+          var c = ca[i];
+          while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+          }
+          if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+          }
+        }
+        return "";
+       }
+
+      function updateInput() {
+        var element1 = document.getElementById("mobilehandle")
+        var element2 = document.getElementById("mobilemsgtxt")
+        var submitButton = document.getElementById("mobileSubmit")
+
+        submitButton.disabled = (element1.value == "" || element2.value == "")
+      }
+
+      function unclean(value) {
+            value = value.replace(/&#91;/g,'[');
+            value = value.replace(/&#93;/g,']');
+            value = value.replace(/&#123;/g,'{');
+            value = value.replace(/&#125;/g,'}');
+            value = value.replace(/&#44;/g,',');
+            value = value.replace(/&#58;/g,':');
+            value = value.replace(/&#34;/g,'\"');
+            value = value.replace(/&#92;/g,'\\');
+            value = value.replace(/</g,'');
+            value = value.replace(/>/g,'');
+         return value
+      }
+
+      function clean(value) {
+            var regex = new RegExp('\\[', 'g');
+            value = value.replace(regex,'&#91;');
+            value = value.replace(/]/g,'&#93;');
+            value = value.replace(/{/g,'&#123;');
+            value = value.replace(/}/g,'&#125;');
+            value = value.replace(/,/g,'&#44;');
+            value = value.replace(/:/g,'&#58;');
+            value = value.replace(/\"/g,'&#34;');
+            value = value.replace(/\\/g,'&#92;');
+         return value
+      }
+
+      function setCookie(cname, cvalue, exdays) {
+        var d = new Date();
+        d.setTime(d.getTime() + (exdays*24*60*60*1000));
+        var expires = "expires="+ d.toUTCString();
+        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+      }
+
+      function clean2(value) {
+            value = value.replace(/>/g,'&gt;');
+            value = value.replace(/</g,'&lt;');
+         return value
+      }
+
+			function filedetailsRead() {
+        if (requestfiledetails.status >= 200 && requestfiledetails.status < 400) {
+          var data = JSON.parse(this.response);
+
+            var list = ""
+						var n = 1
+						data.forEach(function (fileItem) {
+						  var bbsdate = fileItem.calldate
+							bbsdate = bbsdate.substring(0,bbsdate.length - 7)
+							list = list + "          <font color='#00ff00'>"+n+")</font> <font color='#ffff00'>"+clean2(fileItem.bbsname)+" by "+clean2(fileItem.calluser)+" ("+bbsdate+")</font>"+ String.fromCharCode(13)
+							n++
+						})
+
+						var element = document.getElementById("filesuploadedto").innerHTML = list
+					}
+					
+					
+			}
+
+
+
+
+      function showCallItems() {
+        page=1
+
+        getCallItems()
+        getFileItems()
+
+      }
+
+      
+       document.getElementById("callsbody").innerHTML = '';
+
+
+       var requestfiles = new XMLHttpRequest();
+         requestfiles.onload = fileitemsRead
+
+       var requestcalls = new XMLHttpRequest();
+         requestcalls.onload = callitemsRead
+
+
+       var requestfiledetails = new XMLHttpRequest();
+         requestfiledetails.onload = filedetailsRead
+
+
+
+       var page = 1
+
+       document.addEventListener('keydown', keyPressHandler)
+        
+       
+      var output = '';
+     
+		</script>
+
+</body>
+</html>

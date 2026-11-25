@@ -4,24 +4,18 @@
  <meta http-equiv="Content-Type" content="text/html;charset=utf-8"> 
 </head>
 <body>
-<div id="fTelnetContainer" class="fTelnetContainer"></div>
-<script>document.write('<script src="//embed-v2.ftelnet.ca/js/ftelnet-loader.norip.xfer.js?v=' + (new Date()).getTime() + '"><\/script>');</script>
+<div id="fTelnetContainer"></div>
+<!-- Looks weird, but this ensures your users always get the latest version of fTelnet and not an old version from their cache -->
+<script>document.write('<script src="//embed.ftelnet.ca/js/ftelnet-loader.js?v=' + (new Date()).getTime() + '"><\/script>');</script>
 <script>
-    var Options = new fTelnetOptions();
-    Options.BareLFtoCRLF = false;
-    Options.BitsPerSecond = 57600;
-    Options.ConnectionType = 'telnet';
-    Options.Emulation = 'ansi-bbs';
-    Options.Enter = '\r';
-    Options.Font = 'CP437';
-    Options.ForceWss = false;
-    Options.Hostname = 'phantasm.bbs.io';
-    Options.LocalEcho = false;
-    Options.Port = 4490;
-    Options.ScreenColumns = 80;
-    Options.ScreenRows = 29;
-    var fTelnet = new fTelnetClient('fTelnetContainer', Options);
-    fTelnet.Connect();
+    fTelnet.Hostname = "phantasm.bbs.io";
+    fTelnet.Port = 4489;
+    fTelnet.ProxyHostname = "proxy-us-ca.ftelnet.ca";
+    fTelnet.ProxyPort = 80;
+    fTelnet.ProxyPortSecure = 443;
+    fTelnet.ConnectionType = "telnet";
+    fTelnet.Emulation = "ansi-bbs";
+    fTelnet.Init();
 </script>
 </body>
 </html>
